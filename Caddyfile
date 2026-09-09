@@ -1,7 +1,7 @@
-app.dicisiky.ro {
+dicisiky.xyz {
 	reverse_proxy frontend:3000
 }
 
-api.dicisiky.ro {
+api.dicisiky.xyz {
 	reverse_proxy backend:4000
 }
