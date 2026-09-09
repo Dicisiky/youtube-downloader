@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Purely "what is YouTube actually doing right now" -- set only from live-check
+// results (the poll loop and the immediate mid-stream check), never touched by
+// pause/resume or recording outcomes. This is what regular USERs see as the
+// headline badge: a paused channel that's still airing on YouTube must still
+// show LIVE here, independent of RecordingStatus below.
+enum LiveStatus {
+  OFFLINE
+  LIVE
+}
+
+// Purely "what is THIS APP doing about it" -- independent of LiveStatus.
+// PAUSED specifically means an admin turned capture off for this channel;
+// the channel can be LiveStatus=LIVE and RecordingStatus=PAUSED at the same
+// time, which is the scenario this split exists to represent.
+enum RecordingStatus {
+  IDLE // not recording, not paused -- normal monitoring state
+  RECORDING // yt-dlp actively capturing right now
+  PAUSED // admin paused capture for this channel (isActive = false)
+  ERROR // last poll or recording attempt failed
+}
+
+enum JobStatus {
+  MONITORING // waiting for the stream to go live
+  RECORDING // yt-dlp actively pulling the stream
+  PROCESSING // stream ended, finalizing the file
+  UPLOADING // pushing to YouTube via resumable upload
+  COMPLETED // uploaded successfully
+  FAILED // unrecoverable error somewhere in the pipeline
+}
+
+enum Visibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+enum UserStatus {
+  PENDING // signed in with Google, waiting on an admin to approve
+  APPROVED // can use the app
+  REJECTED // admin denied the request
+}
+
+enum UserRole {
+  ADMIN // can add/remove/pause/stop channels, manage upload destinations, approve accounts
+  USER // read-only: can view channel and job status, nothing else
+}
+
+/// An account that has signed in with "Sign in with Google" (app-access
+/// login, distinct from the OAuth2 upload-destination authorization on
+/// UploadConfig). New accounts default to PENDING and are locked out of
+/// every feature route until an admin approves them.
+model User {
+  id         String     @id @default(cuid())
+  googleId   String     @unique // the Google account's stable "sub" claim
+  email      String     @unique
+  name       String?
+  picture    String?
+  status     UserStatus @default(PENDING)
+  role       UserRole   @default(USER)
+  approvedAt DateTime?
+
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([status])
+}
+
+/// A YouTube channel that is whitelisted for live-stream monitoring.
+model MonitoredChannel {
+  id                String        @id @default(cuid())
+  channelUrl        String
+  channelId         String        @unique // resolved UC... id, used for API polling
+  channelTitle      String?
+  channelThumbnail  String?
+  isActive          Boolean         @default(true)
+  liveStatus        LiveStatus      @default(OFFLINE)
+  recordingStatus   RecordingStatus @default(IDLE)
+  currentVideoId    String? // videoId of the live broadcast currently being tracked
+  lastPolledAt      DateTime?
+  lastError         String?
+
+  uploadConfigId    String
+  uploadConfig      UploadConfig  @relation(fields: [uploadConfigId], references: [id])
+
+  // Optional playlist (on the DESTINATION channel) that finished uploads get
+  // added to, in addition to being uploaded. Null means "no playlist".
+  playlistId        String?
+  playlistTitle     String? // display-only snapshot from when it was picked, in case it's later renamed/deleted
+
+  defaultVisibility Visibility    @default(UNLISTED)
+  titleTemplate     String        @default("{channelTitle} - {originalTitle} ({date})")
+
+  recordingJobs     RecordingJob[]
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([isActive])
+}
+
+/// An OAuth2-authorized destination YouTube channel that recordings get re-uploaded to.
+model UploadConfig {
+  id             String   @id @default(cuid())
+  label          String // friendly name shown in the UI, e.g. "Main Archive Channel"
+  youtubeChannelId String
+  youtubeChannelTitle String?
+
+  // OAuth2 tokens for the destination channel's Google account.
+  accessToken    String
+  refreshToken   String
+  tokenExpiresAt DateTime
+  scope          String?
+
+  monitoredChannels MonitoredChannel[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// One lifecycle instance of "a specific livestream got recorded and re-uploaded".
+model RecordingJob {
+  id                 String    @id @default(cuid())
+  monitoredChannelId String
+  monitoredChannel   MonitoredChannel @relation(fields: [monitoredChannelId], references: [id], onDelete: Cascade)
+
+  sourceVideoId      String // the live broadcast's YouTube video id
+  sourceTitle        String?
+  status             JobStatus @default(MONITORING)
+
+  filePath           String? // absolute path to the recorded file on disk
+  fileSizeBytes       BigInt?
+
+  destinationVideoId String? // videoId returned after successful upload
+  // Snapshot of the channel's defaultVisibility AT THE TIME this job uploaded --
+  // not a live lookup of the channel's current setting, which can change later
+  // and would otherwise make past uploads report the wrong visibility.
+  uploadedVisibility Visibility?
+  errorMessage       String?
+  retryCount         Int       @default(0)
+
+  startedAt          DateTime  @default(now())
+  recordingEndedAt   DateTime?
+  uploadStartedAt    DateTime?
+  completedAt        DateTime?
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([monitoredChannelId])
+  @@index([status])
+}
