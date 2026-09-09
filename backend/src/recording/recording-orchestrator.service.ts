@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { unlink } from 'fs/promises';
 import { JobStatus, LiveStatus, RecordingStatus } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -180,6 +181,15 @@ export class RecordingOrchestratorService {
         destinationVideoId,
         completedAt: new Date(),
       });
+
+      // Upload confirmed on YouTube -- the local copy has served its purpose.
+      // Only reached on success: a failed upload keeps its file on disk so it
+      // can be retried/recovered rather than losing the only copy.
+      try {
+        await unlink(finalPath);
+      } catch (err) {
+        this.logger.warn(`could not delete local recording ${finalPath} after upload: ${(err as Error).message}`);
+      }
     } catch (err) {
       this.logger.error(`upload failed for job ${jobId}`, err as Error);
       await this.jobs.updateStatus(jobId, JobStatus.FAILED, { errorMessage: (err as Error).message });
