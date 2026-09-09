@@ -86,6 +86,7 @@ export class YtdlpManagerService {
     const { jobId, videoId, channelSlug } = opts;
     const binary = this.config.get<string>('ytdlp.binaryPath')!;
     const ffmpeg = this.config.get<string>('ytdlp.ffmpegPath')!;
+    const cookiesFile = this.config.get<string>('ytdlp.cookiesFile');
     const outputTemplate = this.outputPathFor(channelSlug, videoId, segment);
     const liveUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
@@ -108,6 +109,7 @@ export class YtdlpManagerService {
       '--no-colors',
       '--print',
       'after_move:filepath',
+      ...(cookiesFile ? ['--cookies', cookiesFile] : []),
     ];
 
     this.logger.log(`[${jobId}] spawning yt-dlp for videoId=${videoId} (attempt ${restartCount + 1})`);

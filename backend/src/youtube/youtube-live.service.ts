@@ -97,6 +97,7 @@ export class YoutubeLiveService {
    */
   async getActiveLiveBroadcast(channelId: string): Promise<LiveBroadcastInfo | null> {
     const binary = this.config.get<string>('ytdlp.binaryPath')!;
+    const cookiesFile = this.config.get<string>('ytdlp.cookiesFile');
     try {
       const { stdout } = await execFileAsync(
         binary,
@@ -109,6 +110,7 @@ export class YoutubeLiveService {
           'id=%(id)s',
           '--print',
           'title=%(title)s',
+          ...(cookiesFile ? ['--cookies', cookiesFile] : []),
           `https://www.youtube.com/channel/${channelId}/live`,
         ],
         { timeout: 20_000 },

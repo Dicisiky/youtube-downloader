@@ -16,6 +16,9 @@ dist/
 storage/recordings/*
 !storage/recordings/.gitkeep
 
+# --- yt-dlp cookies (real YouTube session credentials, never commit) ---
+secrets/
+
 # --- Logs ---
 *.log
 npm-debug.log*

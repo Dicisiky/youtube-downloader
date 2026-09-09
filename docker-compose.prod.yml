@@ -23,8 +23,10 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/yt_livestream?schema=public
       RECORDINGS_DIR: /app/storage/recordings
       FFMPEG_PATH: /usr/bin/ffmpeg
+      YTDLP_COOKIES_FILE: /app/secrets/cookies.txt
     volumes:
       - ./storage/recordings:/app/storage/recordings
+      - ./secrets/cookies.txt:/app/secrets/cookies.txt:ro
     depends_on:
       postgres:
         condition: service_healthy

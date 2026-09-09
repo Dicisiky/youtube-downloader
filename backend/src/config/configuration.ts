@@ -16,6 +16,11 @@ export default () => ({
     binaryPath: process.env.YTDLP_PATH ?? 'yt-dlp.exe',
     ffmpegPath: process.env.FFMPEG_PATH ?? 'ffmpeg.exe',
     recordingsDir: process.env.RECORDINGS_DIR ?? 'storage/recordings',
+    // Path to a Netscape-format cookies.txt from a real logged-in YouTube
+    // session. Optional locally, but needed on cloud/datacenter IPs (VPS
+    // providers) where YouTube's bot-detection challenges anonymous requests
+    // with "Sign in to confirm you're not a bot".
+    cookiesFile: process.env.YTDLP_COOKIES_FILE ?? '',
   },
   poll: {
     intervalMs: parseInt(process.env.POLL_INTERVAL_MS ?? '60000', 10),
