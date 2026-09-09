@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { google } from 'googleapis';
+import { cleanupCookiesSnapshot, snapshotCookiesFile } from '../ytdlp/ytdlp-cookies.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -97,7 +98,10 @@ export class YoutubeLiveService {
    */
   async getActiveLiveBroadcast(channelId: string): Promise<LiveBroadcastInfo | null> {
     const binary = this.config.get<string>('ytdlp.binaryPath')!;
-    const cookiesFile = this.config.get<string>('ytdlp.cookiesFile');
+    // Every call gets its own snapshot of the cookies file rather than the
+    // shared configured path -- see ytdlp-cookies.util.ts for why sharing one
+    // file across concurrent yt-dlp invocations corrupts the session.
+    const cookiesSnapshot = snapshotCookiesFile(this.config.get<string>('ytdlp.cookiesFile'));
     try {
       const { stdout } = await execFileAsync(
         binary,
@@ -110,7 +114,7 @@ export class YoutubeLiveService {
           'id=%(id)s',
           '--print',
           'title=%(title)s',
-          ...(cookiesFile ? ['--cookies', cookiesFile] : []),
+          ...(cookiesSnapshot ? ['--cookies', cookiesSnapshot] : []),
           `https://www.youtube.com/channel/${channelId}/live`,
         ],
         { timeout: 20_000 },
@@ -134,6 +138,8 @@ export class YoutubeLiveService {
       if (/not currently live/i.test(message) || /(?:will begin|premieres) in/i.test(message)) return null;
       this.logger.error(`live-status check failed for ${channelId}`, err as Error);
       throw err;
+    } finally {
+      cleanupCookiesSnapshot(cookiesSnapshot);
     }
   }
 
