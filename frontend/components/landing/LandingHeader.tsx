@@ -5,12 +5,15 @@ import { LegalLinks } from '../LegalLinks';
 export function LandingHeader() {
   return (
     <header className="fixed inset-x-0 top-0 z-20 border-b border-white/5 bg-[#05070a]/60 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <span style={{ fontFamily: 'var(--font-sora)' }} className="text-sm font-semibold text-gray-100">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <span
+          style={{ fontFamily: 'var(--font-sora)' }}
+          className="min-w-0 truncate text-sm font-semibold text-gray-100"
+        >
           Dicisiky&apos;s Livestreams Archive
         </span>
 
-        <div className="flex items-center gap-5">
+        <div className="flex shrink-0 items-center gap-5">
           <LegalLinks className="hidden sm:flex" />
           <button
             onClick={() => api.loginWithGoogle()}

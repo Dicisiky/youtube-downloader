@@ -93,7 +93,7 @@ export function AddChannelModal({ open, uploadConfigs, onClose, onCreated }: Pro
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-900 p-6 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-xl sm:p-6">
         <h2 className="text-lg font-semibold text-gray-100">Add channel to monitor</h2>
         <p className="mt-1 text-sm text-gray-400">
           If the channel is already live, recording starts immediately after you save.

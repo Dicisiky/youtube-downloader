@@ -55,31 +55,29 @@ export function ChannelCard({
       : null;
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 p-4">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-3 rounded-lg border border-gray-800 bg-gray-900 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
         {channel.channelThumbnail && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={channel.channelThumbnail}
             alt=""
-            className="h-10 w-10 rounded-full"
+            className="h-10 w-10 shrink-0 rounded-full"
           />
         )}
-        <div>
-          <div className="flex flex-row items-end gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
             <a
               href={channel.channelUrl}
               target="_blank"
               rel="noreferrer"
-              className="font-medium text-gray-100 hover:underline"
+              className="truncate font-medium text-gray-100 hover:underline"
             >
-              <div className="flex flex-row items-center gap-4">
-                {channel.channelTitle ?? channel.channelUrl}
-                {/* Independent by design: LiveStatus reflects YouTube's actual state
+              {channel.channelTitle ?? channel.channelUrl}
+              {/* Independent by design: LiveStatus reflects YouTube's actual state
             (set only from live-checks), RecordingStatus reflects this app's
             action -- a paused channel that's still airing shows LIVE here
             alongside PAUSED below, at the same time. */}
-              </div>
             </a>
             <StatusBadge status={channel.liveStatus} />
             {/* While a job is in flight, its finer-grained status (RECORDING /
@@ -89,13 +87,13 @@ export function ChannelCard({
               status={activeJob?.status ?? channel.recordingStatus}
             />
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-400">
             <span>Uploads to: {channel.uploadConfig?.label ?? "unknown"}</span>
-            <span>&middot;</span>
+            <span className="hidden sm:inline">&middot;</span>
             <span>Visibility: {channel.defaultVisibility.toLowerCase()}</span>
             {channel.playlistTitle && (
               <>
-                <span>&middot;</span>
+                <span className="hidden sm:inline">&middot;</span>
                 <span>Playlist: {channel.playlistTitle}</span>
               </>
             )}
@@ -106,7 +104,7 @@ export function ChannelCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1 sm:shrink-0 sm:justify-end">
         {lastUnlistedUrl ? (
           <a
             href={lastUnlistedUrl}
@@ -135,7 +133,7 @@ export function ChannelCard({
           </button>
         )}
         {canManage && (
-          <div className="flex items-center">
+          <div className="flex flex-wrap items-center">
             <button
               onClick={onEdit}
               className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-800"

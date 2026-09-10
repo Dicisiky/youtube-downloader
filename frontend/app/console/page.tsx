@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { useCurrentUser } from '../../lib/useCurrentUser';
 import { LoginScreen } from '../../components/LoginScreen';
 import { PendingApprovalScreen } from '../../components/PendingApprovalScreen';
@@ -39,28 +40,30 @@ export default function ConsolePage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <header className="flex items-center justify-between">
+    <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">Console</h1>
+          <h1 className="text-xl font-bold text-gray-100 sm:text-2xl">Console</h1>
           <p className="mt-1 text-sm text-gray-400">Access requests and upload destination configuration.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <LegalLinks />
-          <span className="text-sm text-gray-400">{user.email}</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:justify-end">
+          <LegalLinks className="hidden sm:flex" />
+          <span className="max-w-[12rem] truncate text-sm text-gray-400">{user.email}</span>
+          <Link href="/" className="rounded-md bg-gray-700 px-3 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-600 sm:px-4 sm:py-2">
+            ← Dashboard
+          </Link>
           <button
             onClick={() => api.logout().then(() => window.location.reload())}
             className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-400 hover:bg-gray-800"
           >
             Sign out
           </button>
-          <Link href="/" className="rounded-md bg-gray-700 px-4 py-2 text-sm font-medium text-gray-100 hover:bg-gray-600">
-            ← Dashboard
-          </Link>
         </div>
       </header>
 
-      <AdminPanel currentUserId={user.id} />
+      <Suspense fallback={null}>
+        <AdminPanel currentUserId={user.id} />
+      </Suspense>
       <UploadDestinationsPanel />
     </main>
   );

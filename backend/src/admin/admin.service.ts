@@ -6,8 +6,13 @@ export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   listUsers() {
+    // Ordered purely by signup time, not status -- sorting by status meant
+    // approving/rejecting/disabling someone physically jumped their row to a
+    // different part of the list (e.g. disabling an APPROVED user sent them
+    // to the bottom, alphabetically after REJECTED), which is disorienting
+    // mid-review. Row position now only ever reflects when they signed up.
     return this.prisma.user.findMany({
-      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+      orderBy: { createdAt: 'asc' },
       select: {
         id: true,
         email: true,
@@ -28,7 +33,11 @@ export class AdminService {
 
   async reject(id: string) {
     await this.ensureExists(id);
-    return this.prisma.user.update({ where: { id }, data: { status: 'REJECTED', approvedAt: null } });
+    // approvedAt is deliberately left untouched here (only ever set by
+    // approve()) -- it now doubles as "has this user ever been approved",
+    // which the frontend uses to decide whether to keep showing the
+    // enable/disable switch instead of reverting to Approve/Reject buttons.
+    return this.prisma.user.update({ where: { id }, data: { status: 'REJECTED' } });
   }
 
   private async ensureExists(id: string) {
