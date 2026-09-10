@@ -26,7 +26,7 @@ services:
       YTDLP_COOKIES_FILE: /app/secrets/cookies.txt
     volumes:
       - ./storage/recordings:/app/storage/recordings
-      - ./secrets/cookies.txt:/app/secrets/cookies.txt:ro
+      - ./secrets/cookies.txt:/app/secrets/cookies.txt
     depends_on:
       postgres:
         condition: service_healthy

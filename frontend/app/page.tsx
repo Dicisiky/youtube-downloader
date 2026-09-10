@@ -11,6 +11,7 @@ import { AddChannelModal } from '../components/AddChannelModal';
 import { EditChannelModal } from '../components/EditChannelModal';
 import { LoginScreen } from '../components/LoginScreen';
 import { PendingApprovalScreen } from '../components/PendingApprovalScreen';
+import { LegalLinks } from '../components/LegalLinks';
 
 /**
  * Root gate: every core feature below lives behind this check. The backend's
@@ -81,16 +82,17 @@ function Dashboard({ user }: { user: AppUser }) {
   }, {});
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
+    <main className="mx-auto max-w-7xl px-6 py-10">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">Livestream Archiver</h1>
+          <h1 className="text-2xl font-bold text-gray-100">Dicisiky's Livestreams Archive</h1>
           <p className="mt-1 text-sm text-gray-400">
             <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${live.connected ? 'bg-emerald-500' : 'bg-gray-600'}`} />
             {live.connected ? 'Live updates connected' : 'Reconnecting…'}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <LegalLinks />
           <span className="text-sm text-gray-400">{user.email}</span>
           <button
             onClick={() => api.logout().then(() => window.location.reload())}

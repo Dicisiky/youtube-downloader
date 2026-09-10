@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Livestream Archiver',
+  title: "Dicisiky's Livestreams Archive",
   description: 'Monitor, record, and re-upload YouTube livestreams',
 };
 

@@ -6,6 +6,7 @@ import { LoginScreen } from '../../components/LoginScreen';
 import { PendingApprovalScreen } from '../../components/PendingApprovalScreen';
 import { AdminPanel } from '../../components/AdminPanel';
 import { UploadDestinationsPanel } from '../../components/UploadDestinationsPanel';
+import { LegalLinks } from '../../components/LegalLinks';
 import { api } from '../../lib/api';
 
 /**
@@ -45,6 +46,7 @@ export default function ConsolePage() {
           <p className="mt-1 text-sm text-gray-400">Access requests and upload destination configuration.</p>
         </div>
         <div className="flex items-center gap-3">
+          <LegalLinks />
           <span className="text-sm text-gray-400">{user.email}</span>
           <button
             onClick={() => api.logout().then(() => window.location.reload())}
