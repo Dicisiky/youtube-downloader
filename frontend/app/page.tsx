@@ -9,9 +9,9 @@ import type { AppUser, MonitoredChannel, RecordingJob, UploadConfig } from '../l
 import { ChannelCard } from '../components/ChannelCard';
 import { AddChannelModal } from '../components/AddChannelModal';
 import { EditChannelModal } from '../components/EditChannelModal';
-import { LoginScreen } from '../components/LoginScreen';
 import { PendingApprovalScreen } from '../components/PendingApprovalScreen';
 import { LegalLinks } from '../components/LegalLinks';
+import { ScrollStory } from '../components/landing/ScrollStory';
 
 /**
  * Root gate: every core feature below lives behind this check. The backend's
@@ -25,7 +25,7 @@ export default function AuthGate() {
   const { loading, user } = useCurrentUser();
 
   if (loading) return null;
-  if (!user) return <LoginScreen />;
+  if (!user) return <ScrollStory />;
   if (user.status !== 'APPROVED') return <PendingApprovalScreen user={user} />;
   return <Dashboard user={user} />;
 }
