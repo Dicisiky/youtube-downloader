@@ -9,7 +9,7 @@ export default function PrivacyPolicyPage() {
   return (
     <LegalPage title="Privacy Policy" updated="September 2026">
       <p>
-        Dicisiky's Livestreams Archive ("the app") monitors YouTube channels for livestreams, records them, and re-uploads the
+        Dicisiky's Livestreams Archive monitors YouTube channels for livestreams, records them, and re-uploads the
         finished recordings to a destination YouTube channel on your behalf. This page explains what data the app
         collects, why, and how it's used.
       </p>
