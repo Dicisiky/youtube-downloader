@@ -18,6 +18,9 @@ website.dicisiky.xyz {
         redir https://dicisiky.xyz{uri} permanent
 }
 
+livestreams.dicisiky.xyz {
+        redir https://dicisiky.xyz{uri} permanent
+
 api.dicisiky.xyz {
 	reverse_proxy backend:4000
 }
