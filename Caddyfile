@@ -6,6 +6,18 @@ www.dicisiky.xyz {
 	redir https://dicisiky.xyz{uri} permanent
 }
 
+archiver.dicisiky.xyz {
+        redir https://dicisiky.xyz{uri} permanent
+}
+
+www.archiver.dicisiky.xyz {
+        redir https://dicisiky.xyz{uri} permanent
+}
+
+website.dicisiky.xyz {
+        redir https://dicisiky.xyz{uri} permanent
+}
+
 api.dicisiky.xyz {
 	reverse_proxy backend:4000
 }
