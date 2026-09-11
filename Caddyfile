@@ -2,6 +2,10 @@ dicisiky.xyz {
 	reverse_proxy frontend:3000
 }
 
+www.dicisiky.xyz {
+	redir https://dicisiky.xyz{uri} permanent
+}
+
 api.dicisiky.xyz {
 	reverse_proxy backend:4000
 }
