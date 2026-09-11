@@ -8,7 +8,8 @@ import { LandingHeader } from './LandingHeader';
 const RackCanvas = dynamic(() => import('./RackCanvas').then((m) => m.RackCanvas), { ssr: false, loading: () => null });
 
 const BEATS = [
-  { title: 'We watch your channels.', body: "Add any YouTube channel you care about and we'll keep an eye on it around the clock — no tabs to leave open, nothing to check yourself." },
+  { title: 'Momentan aplicatia se afla in mentenanta', body: "Revenim cat de repede posibil pentru a putea fi la curent cu orice live" },
+  // { title: 'We watch your channels.', body: "Add any YouTube channel you care about and we'll keep an eye on it around the clock — no tabs to leave open, nothing to check yourself." },
   { title: 'The moment they go live, we start recording.', body: "The second a stream starts, we're already capturing it — even if it was already live when you added the channel." },
   { title: '...and save it straight to your own channel.', body: "Once the stream ends, we upload the full recording for you automatically. No downloading, no re-uploading, nothing to remember." },
   { title: 'Set it up once. Never miss a stream again.', body: 'Sign in and start watching — your archive builds itself from here.' },
