@@ -20,7 +20,15 @@ export default () => ({
     // session. Optional locally, but needed on cloud/datacenter IPs (VPS
     // providers) where YouTube's bot-detection challenges anonymous requests
     // with "Sign in to confirm you're not a bot".
+    // Fallback only -- used when browserProfileDir isn't set. A static
+    // exported file doesn't self-refresh, so it eventually goes stale.
     cookiesFile: process.env.YTDLP_COOKIES_FILE ?? '',
+    // Directory of a persistent, already-logged-in Chromium profile. When
+    // set, takes priority over cookiesFile: yt-dlp reads cookies live from
+    // this profile's own cookie store via --cookies-from-browser, so the
+    // session keeps rotating/refreshing itself the same way it would in a
+    // real browser, instead of going stale like a one-time exported file.
+    browserProfileDir: process.env.YTDLP_BROWSER_PROFILE_DIR ?? '',
   },
   poll: {
     intervalMs: parseInt(process.env.POLL_INTERVAL_MS ?? '60000', 10),

@@ -24,9 +24,11 @@ services:
       RECORDINGS_DIR: /app/storage/recordings
       FFMPEG_PATH: /usr/bin/ffmpeg
       YTDLP_COOKIES_FILE: /app/secrets/cookies.txt
+      YTDLP_BROWSER_PROFILE_DIR: /app/secrets/chrome-profile
     volumes:
       - ./storage/recordings:/app/storage/recordings
       - ./secrets/cookies.txt:/app/secrets/cookies.txt
+      - ./secrets/chrome-profile:/app/secrets/chrome-profile
     depends_on:
       postgres:
         condition: service_healthy

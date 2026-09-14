@@ -1,7 +1,11 @@
 FROM node:20-bookworm-slim
 
+# chromium (full, not --no-install-recommends) pulls in the shared libs it
+# needs to actually launch headless -- trimming recommends here is what
+# breaks headless launch with missing .so errors.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg ca-certificates curl unzip \
+    && apt-get install -y chromium \
     && rm -rf /var/lib/apt/lists/* \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
@@ -9,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && unzip -o /tmp/deno.zip -d /usr/local/bin \
     && rm /tmp/deno.zip \
     && chmod a+rx /usr/local/bin/deno
+
+ENV CHROMIUM_PATH=/usr/bin/chromium
 
 WORKDIR /app
 

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { promisify } from 'util';
-import { cleanupCookiesSnapshot, snapshotCookiesFile } from './ytdlp-cookies.util';
+import { resolveCookieArgs } from './ytdlp-cookies.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -87,12 +87,12 @@ export class YtdlpManagerService {
     const { jobId, videoId, channelSlug } = opts;
     const binary = this.config.get<string>('ytdlp.binaryPath')!;
     const ffmpeg = this.config.get<string>('ytdlp.ffmpegPath')!;
-    // Each recording process gets its own snapshot of the cookies file rather
-    // than the shared configured path -- see ytdlp-cookies.util.ts for why
-    // sharing one file across concurrent yt-dlp invocations corrupts the
-    // session (this is what broke every channel's live-check after two
-    // recordings ran at once and both mutated the same cookies.txt).
-    const cookiesSnapshot = snapshotCookiesFile(this.config.get<string>('ytdlp.cookiesFile'));
+    // Prefers the persistent Chromium profile (self-refreshing session) over
+    // the static cookies.txt snapshot -- see ytdlp-cookies.util.ts.
+    const { args: cookieArgs, cleanup: cleanupCookies } = resolveCookieArgs({
+      browserProfileDir: this.config.get<string>('ytdlp.browserProfileDir'),
+      cookiesFile: this.config.get<string>('ytdlp.cookiesFile'),
+    });
     const outputTemplate = this.outputPathFor(channelSlug, videoId, segment);
     const liveUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
@@ -115,7 +115,7 @@ export class YtdlpManagerService {
       '--no-colors',
       '--print',
       'after_move:filepath',
-      ...(cookiesSnapshot ? ['--cookies', cookiesSnapshot] : []),
+      ...cookieArgs,
     ];
 
     this.logger.log(`[${jobId}] spawning yt-dlp for videoId=${videoId} (attempt ${restartCount + 1})`);
@@ -147,12 +147,12 @@ export class YtdlpManagerService {
     child.on('error', (err) => {
       this.logger.error(`[${jobId}] failed to spawn yt-dlp`, err);
       this.active.delete(jobId);
-      cleanupCookiesSnapshot(cookiesSnapshot);
+      cleanupCookies();
       opts.onExit({ success: false, filePath: resolvedFilePath, reason: 'failed', error: err.message });
     });
 
     child.on('close', (code) => {
-      cleanupCookiesSnapshot(cookiesSnapshot);
+      cleanupCookies();
       const manualStop = this.active.get(jobId)?.manualStop ?? false;
       this.active.delete(jobId);
 
