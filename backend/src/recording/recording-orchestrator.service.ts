@@ -9,6 +9,12 @@ import { YoutubeUploadService } from '../youtube/youtube-upload.service';
 import { YoutubeLiveService } from '../youtube/youtube-live.service';
 import type { MonitoredChannel } from '@prisma/client';
 
+// How many times a job may be resumed as a new segment after yt-dlp exhausts
+// its own in-place restarts, before giving up for good even if the broadcast
+// is still reported live -- guards against retrying forever on a genuinely
+// broken pipeline (vs. a transient YouTube-side hiccup).
+const MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES = 5;
+
 /**
  * The single place that owns a recording job's full lifecycle:
  * RECORDING -> PROCESSING -> UPLOADING -> COMPLETED/FAILED.
@@ -90,6 +96,35 @@ export class RecordingOrchestratorService {
     }
 
     if (!result.success) {
+      // yt-dlp gave up after exhausting its own in-place restarts (e.g.
+      // YouTube's own transient "We're experiencing technical difficulties"
+      // on the live-serving side, which can outlast that budget). Exiting
+      // the JOB here -- rather than just the process -- used to mean the next
+      // poll tick would see the same still-live broadcast and start a brand
+      // new job for it, uploading the same continuous stream as many separate
+      // short videos. Re-checking live status first and continuing as a new
+      // segment (same mechanism as the stream_ended false-alarm case below)
+      // closes that gap. Capped via retryCount so a genuinely broken pipeline
+      // (not a transient YouTube hiccup) still surfaces as FAILED eventually
+      // instead of retrying forever.
+      if (stillExists.retryCount < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES) {
+        try {
+          const stillLive = await this.youtubeLive.getActiveLiveBroadcast(channel.channelId);
+          if (stillLive && stillLive.videoId === recordingOptions.videoId) {
+            this.logger.warn(
+              `[${jobId}] yt-dlp exhausted its local retries (${result.error}) but the same broadcast is still airing -- continuing as a new segment instead of failing the job`,
+            );
+            await this.jobs.incrementRetryCount(jobId);
+            this.ytdlp.continueSegment(recordingOptions);
+            return;
+          }
+        } catch (err) {
+          this.logger.warn(
+            `live re-check after exhausted retries failed for ${channel.channelId}, failing job ${jobId} anyway: ${(err as Error).message}`,
+          );
+        }
+      }
+
       await this.jobs.updateStatus(jobId, JobStatus.FAILED, { errorMessage: result.error });
       // RecordingStatus=ERROR reflects OUR pipeline failing -- it says nothing
       // about whether the broadcast itself is still live, so LiveStatus is

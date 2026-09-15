@@ -26,7 +26,13 @@ interface ActiveRecording {
   manualStop: boolean;
 }
 
-const MAX_AUTO_RESTARTS = 5;
+const MAX_AUTO_RESTARTS = 6;
+// Exponential backoff (capped) between in-place restarts, keyed by restartCount.
+// A flat 5s gave up in under a minute total -- too short for YouTube's own
+// transient "We're experiencing technical difficulties" live-serving hiccups,
+// which commonly take 1-2 minutes to clear on their own.
+const RESTART_BACKOFF_BASE_MS = 5000;
+const RESTART_BACKOFF_MAX_MS = 30000;
 
 /**
  * Owns every live yt-dlp child process. One instance per active RecordingJob.
@@ -188,10 +194,11 @@ export class YtdlpManagerService {
       // retries fragments internally; a full-process restart is our fallback
       // for cases where the whole connection died (e.g. Wi-Fi drop).
       if (restartCount < MAX_AUTO_RESTARTS) {
+        const delay = Math.min(RESTART_BACKOFF_BASE_MS * 2 ** restartCount, RESTART_BACKOFF_MAX_MS);
         this.logger.warn(
-          `[${jobId}] yt-dlp exited with code ${code} (${lastErrorLine}); restarting (${restartCount + 1}/${MAX_AUTO_RESTARTS})`,
+          `[${jobId}] yt-dlp exited with code ${code} (${lastErrorLine}); restarting in ${delay}ms (${restartCount + 1}/${MAX_AUTO_RESTARTS})`,
         );
-        setTimeout(() => this.spawnProcess(opts, restartCount + 1, segment), 5000);
+        setTimeout(() => this.spawnProcess(opts, restartCount + 1, segment), delay);
         return;
       }
 

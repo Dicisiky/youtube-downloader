@@ -45,4 +45,18 @@ export class RecordingJobsService {
     this.events.broadcast({ type: 'job.updated', payload: job });
     return job;
   }
+
+  /** Bumps retryCount without touching status -- used to cap how many times a
+   * job may be resumed as a new segment after exhausting yt-dlp's own local
+   * restarts, so a persistently broken stream still eventually surfaces as
+   * FAILED instead of retrying forever. */
+  async incrementRetryCount(id: string) {
+    const job = await this.prisma.recordingJob.update({
+      where: { id },
+      data: { retryCount: { increment: 1 } },
+      include: { monitoredChannel: true },
+    });
+    this.events.broadcast({ type: 'job.updated', payload: job });
+    return job;
+  }
 }
