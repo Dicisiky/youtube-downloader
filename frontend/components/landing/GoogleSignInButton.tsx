@@ -18,11 +18,11 @@ export function GoogleSignInButton() {
         Sign in with Google
       </button>
 
-      <p className="mt-3 text-center text-xs text-gray-500">
+      <div className="mt-3 text-center text-xs text-gray-500">
         By continuing, you agree to the
         <br />
         <LegalLinks className="mt-1 justify-center" />
-      </p>
+      </div>
     </div>
   );
 }

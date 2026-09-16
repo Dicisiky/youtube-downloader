@@ -1,3 +1,4 @@
+import { Clapperboard } from 'lucide-react';
 import { api } from '../../lib/api';
 import { LegalLinks } from '../LegalLinks';
 
@@ -6,11 +7,13 @@ export function LandingHeader() {
   return (
     <header className="fixed inset-x-0 top-0 z-20 border-b border-white/5 bg-[#05070a]/60 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <span
-          style={{ fontFamily: 'var(--font-sora)' }}
-          className="min-w-0 truncate text-sm font-semibold text-gray-100"
-        >
-          Dicisiky&apos;s Livestreams Archive
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-700 text-white">
+            <Clapperboard className="h-3.5 w-3.5" />
+          </span>
+          <span style={{ fontFamily: 'var(--font-sora)' }} className="truncate text-sm font-semibold text-gray-100">
+            Dicisiky&apos;s Livestreams Archive
+          </span>
         </span>
 
         <div className="flex shrink-0 items-center gap-5">

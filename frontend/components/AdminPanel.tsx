@@ -2,32 +2,18 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Check, Search, ShieldCheck, Users, X } from 'lucide-react';
 import type { AdminUserRow } from '../lib/types';
 import { api } from '../lib/api';
+import { Avatar } from './ui/Avatar';
+import { EmptyState } from './ui/EmptyState';
+import { Skeleton } from './ui/Skeleton';
+import { selectClasses, SelectWrapper } from './ui/Field';
 
 const STATUS_FILTERS = ['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'INACTIVE'] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 function isStatusFilter(v: string | null): v is StatusFilter {
   return !!v && (STATUS_FILTERS as readonly string[]).includes(v);
-}
-
-function initials(user: AdminUserRow): string {
-  const source = user.name?.trim() || user.email;
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return source.slice(0, 2).toUpperCase();
-}
-
-function Avatar({ user }: { user: AdminUserRow }) {
-  if (user.picture) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={user.picture} alt="" className="h-9 w-9 shrink-0 rounded-full ring-1 ring-white/10" />;
-  }
-  return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-700 text-xs font-semibold text-gray-200 ring-1 ring-white/10">
-      {initials(user)}
-    </div>
-  );
 }
 
 type DisplayStatus = AdminUserRow['status'] | 'INACTIVE';
@@ -47,8 +33,8 @@ function StatusPill({ status }: { status: DisplayStatus }) {
   const styles: Record<DisplayStatus, string> = {
     PENDING: 'bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/30',
     APPROVED: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/30',
-    REJECTED: 'bg-gray-500/15 text-gray-400 ring-1 ring-inset ring-gray-500/30',
-    INACTIVE: 'bg-gray-500/15 text-gray-400 ring-1 ring-inset ring-gray-500/30',
+    REJECTED: 'bg-white/5 text-gray-400 ring-1 ring-inset ring-white/10',
+    INACTIVE: 'bg-white/5 text-gray-400 ring-1 ring-inset ring-white/10',
   };
   const labels: Record<DisplayStatus, string> = {
     PENDING: 'Pending',
@@ -56,11 +42,7 @@ function StatusPill({ status }: { status: DisplayStatus }) {
     REJECTED: 'Rejected',
     INACTIVE: 'Inactive',
   };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${styles[status]}`}>
-      {labels[status]}
-    </span>
-  );
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${styles[status]}`}>{labels[status]}</span>;
 }
 
 /**
@@ -80,7 +62,7 @@ function ActiveToggle({ checked, disabled, onChange }: { checked: boolean; disab
       onClick={onChange}
       title={disabled ? "Admins can't be deactivated here" : checked ? 'Deactivate' : 'Activate'}
       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-150 ${
-        checked ? 'bg-emerald-600' : 'bg-gray-700'
+        checked ? 'bg-emerald-600' : 'bg-white/10'
       } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
     >
       <span
@@ -112,10 +94,23 @@ function DecisionButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-30 ${styles}`}
+      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-30 ${styles}`}
     >
       {children}
     </button>
+  );
+}
+
+function UserRowSkeleton() {
+  return (
+    <li className="flex items-center gap-3 px-5 py-3">
+      <Skeleton className="h-9 w-9 rounded-full" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-3.5 w-40" />
+        <Skeleton className="h-3 w-56" />
+      </div>
+      <Skeleton className="h-6 w-16 rounded-full" />
+    </li>
   );
 }
 
@@ -183,13 +178,14 @@ export function AdminPanel({ currentUserId }: { currentUserId: string }) {
   }, [users, search, statusFilter]);
 
   return (
-    <section className="mt-6 rounded-xl border border-gray-800 bg-gray-900/50">
-      <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
+    <section className="mt-6 overflow-hidden rounded-xl border border-white/10 bg-surface-raised/60">
+      <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
         <div>
-          <h2 className="text-sm font-semibold text-gray-100">Users</h2>
-          <p className="mt-0.5 text-xs text-gray-500">
-            {pendingCount > 0 ? `${pendingCount} waiting for approval` : 'Everyone who has signed in'}
-          </p>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-100">
+            <Users className="h-4 w-4 text-gray-500" />
+            Users
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-500">{pendingCount > 0 ? `${pendingCount} waiting for approval` : 'Everyone who has signed in'}</p>
         </div>
         {pendingCount > 0 && (
           <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-300 ring-1 ring-inset ring-amber-500/30">
@@ -198,46 +194,62 @@ export function AdminPanel({ currentUserId }: { currentUserId: string }) {
         )}
       </div>
 
-      <div className="flex flex-col gap-2 border-b border-gray-800 px-5 py-3 sm:flex-row sm:items-center">
-        <input
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search by name or email…"
-          className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:border-indigo-500 focus:outline-none sm:max-w-xs"
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
-        >
-          <option value="ALL">All statuses</option>
-          <option value="PENDING">Pending</option>
-          <option value="APPROVED">Active</option>
-          <option value="REJECTED">Rejected</option>
-          <option value="INACTIVE">Inactive</option>
-        </select>
+      <div className="flex flex-col gap-2 border-b border-white/10 px-5 py-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by name or email…"
+            className="w-full rounded-lg border border-white/10 bg-surface px-3 py-1.5 pl-9 text-sm text-gray-100 placeholder-gray-500 transition-colors focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
+        <div className="relative sm:w-44">
+          <SelectWrapper>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className={`${selectClasses} py-1.5`}>
+              <option value="ALL">All statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="APPROVED">Active</option>
+              <option value="REJECTED">Rejected</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </SelectWrapper>
+        </div>
       </div>
 
-      {loading && <p className="px-5 py-6 text-sm text-gray-400">Loading…</p>}
-      {!loading && users.length === 0 && <p className="px-5 py-6 text-sm text-gray-400">No one has signed in yet.</p>}
+      {loading && (
+        <ul className="divide-y divide-white/5">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <UserRowSkeleton key={i} />
+          ))}
+        </ul>
+      )}
+      {!loading && users.length === 0 && (
+        <div className="px-5 py-8">
+          <EmptyState icon={<Users className="h-6 w-6" />} title="No one has signed in yet" />
+        </div>
+      )}
       {!loading && users.length > 0 && filteredUsers.length === 0 && (
-        <p className="px-5 py-6 text-sm text-gray-400">No users match your search/filter.</p>
+        <div className="px-5 py-8">
+          <EmptyState icon={<Search className="h-6 w-6" />} title="No users match your search/filter" />
+        </div>
       )}
 
       {!loading && filteredUsers.length > 0 && (
-        <ul className="divide-y divide-gray-800">
+        <ul className="divide-y divide-white/5">
           {filteredUsers.map((u) => {
             const isSelf = u.id === currentUserId;
             const isAdminRow = u.role === 'ADMIN';
             return (
-              <li key={u.id} className="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:gap-4">
+              <li key={u.id} className="flex flex-col gap-3 px-5 py-3 transition-colors hover:bg-white/[0.02] sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <Avatar user={u} />
+                  <Avatar name={u.name} email={u.email} picture={u.picture} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium text-gray-100">{u.name ?? u.email}</span>
                       {isAdminRow && (
-                        <span className="inline-flex items-center rounded-full bg-indigo-500/15 px-2 py-0.5 text-[11px] font-medium text-indigo-300 ring-1 ring-inset ring-indigo-500/30">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[11px] font-medium text-indigo-300 ring-1 ring-inset ring-indigo-500/30">
+                          <ShieldCheck className="h-2.5 w-2.5" />
                           Admin
                         </span>
                       )}
@@ -260,19 +272,15 @@ export function AdminPanel({ currentUserId }: { currentUserId: string }) {
                       />
                     ) : (
                       <>
-                        <DecisionButton
-                          variant="approve"
-                          disabled={isAdminRow || isSelf || pendingId === u.id}
-                          onClick={() => setStatus(u, true)}
-                        >
-                          Approve
+                        <DecisionButton variant="approve" disabled={isAdminRow || isSelf || pendingId === u.id} onClick={() => setStatus(u, true)}>
+                          <Check className="h-3 w-3" /> Approve
                         </DecisionButton>
                         <DecisionButton
                           variant="reject"
                           disabled={isAdminRow || isSelf || pendingId === u.id || u.status === 'REJECTED'}
                           onClick={() => setStatus(u, false)}
                         >
-                          Reject
+                          <X className="h-3 w-3" /> Reject
                         </DecisionButton>
                       </>
                     )}

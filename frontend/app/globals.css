@@ -4,6 +4,52 @@
 
 html,
 body {
-  background-color: #0b0f14;
+  background-color: #05070a;
   color: #e6edf3;
+}
+
+* {
+  scrollbar-color: rgb(255 255 255 / 0.15) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgb(255 255 255 / 0.12);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(255 255 255 / 0.22);
+  background-clip: content-box;
+}
+
+::selection {
+  background-color: rgb(99 102 241 / 0.35);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(129 140 248 / 0.8);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@layer utilities {
+  .skeleton {
+    background-image: linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.04) 25%,
+      rgb(255 255 255 / 0.09) 37%,
+      rgb(255 255 255 / 0.04) 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 2.5s ease-in-out infinite;
+  }
 }

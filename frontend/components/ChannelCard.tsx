@@ -1,6 +1,11 @@
-import type { MonitoredChannel, RecordingJob } from "../lib/types";
-import { StatusBadge } from "./StatusBadge";
-import { api } from "../lib/api";
+'use client';
+
+import { AlertTriangle, ExternalLink, ListMusic, Pause, Pencil, Play, PlayCircle, Square, Trash2, UploadCloud, Video } from 'lucide-react';
+import type { MonitoredChannel, RecordingJob } from '../lib/types';
+import { StatusBadge } from './StatusBadge';
+import { api } from '../lib/api';
+import { IconButton } from './ui/Button';
+import { useConfirmDialog } from './ui/ConfirmDialog';
 
 interface Props {
   channel: MonitoredChannel;
@@ -13,35 +18,34 @@ interface Props {
   onEdit: () => void;
 }
 
-export function ChannelCard({
-  channel,
-  activeJob,
-  lastCompletedJob,
-  canManage,
-  onChanged,
-  onEdit,
-}: Props) {
+export function ChannelCard({ channel, activeJob, lastCompletedJob, canManage, onChanged, onEdit }: Props) {
+  const { ask, dialog } = useConfirmDialog();
+
   async function toggleActive() {
     await api.setChannelActive(channel.id, !channel.isActive);
     onChanged();
   }
 
   async function remove() {
-    if (
-      !confirm(
-        `Remove ${channel.channelTitle ?? channel.channelUrl} from monitoring?`,
-      )
-    )
-      return;
+    const ok = await ask({
+      title: 'Remove this channel?',
+      description: `${channel.channelTitle ?? channel.channelUrl} will stop being monitored and recorded.`,
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
     await api.removeChannel(channel.id);
     onChanged();
   }
 
   async function stopRecording() {
-    if (
-      !confirm("Stop recording now and upload what has been captured so far?")
-    )
-      return;
+    const ok = await ask({
+      title: 'Stop recording now?',
+      description: 'Whatever has been captured so far will be uploaded immediately.',
+      confirmLabel: 'Stop & upload',
+      variant: 'danger',
+    });
+    if (!ok) return;
     await api.stopRecording(channel.id);
     onChanged();
   }
@@ -49,21 +53,27 @@ export function ChannelCard({
   // uploadedVisibility is a snapshot of what visibility THAT specific upload
   // actually used, not the channel's current (possibly since-changed) setting.
   const lastUnlistedUrl =
-    lastCompletedJob?.uploadedVisibility === "UNLISTED" &&
-    lastCompletedJob.destinationVideoId
+    lastCompletedJob?.uploadedVisibility === 'UNLISTED' && lastCompletedJob.destinationVideoId
       ? `https://www.youtube.com/watch?v=${lastCompletedJob.destinationVideoId}`
       : null;
 
+  const isRecording = activeJob?.status === 'RECORDING';
+
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-gray-800 bg-gray-900 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={`group flex flex-col gap-3 rounded-xl border bg-surface-raised/60 p-4 transition-all duration-200 hover:bg-surface-hover sm:flex-row sm:items-center sm:justify-between ${
+        isRecording ? 'border-red-500/30' : 'border-white/10 hover:border-white/20'
+      }`}
+    >
+      {dialog}
       <div className="flex min-w-0 items-center gap-3">
-        {channel.channelThumbnail && (
+        {channel.channelThumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={channel.channelThumbnail}
-            alt=""
-            className="h-10 w-10 shrink-0 rounded-full"
-          />
+          <img src={channel.channelThumbnail} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-white/10" />
+        ) : (
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/5 text-gray-500 ring-1 ring-white/10">
+            <Video className="h-5 w-5" />
+          </div>
         )}
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -71,35 +81,38 @@ export function ChannelCard({
               href={channel.channelUrl}
               target="_blank"
               rel="noreferrer"
-              className="truncate font-medium text-gray-100 hover:underline"
+              className="group/link inline-flex items-center gap-1 truncate font-medium text-gray-100 hover:text-indigo-300"
             >
-              {channel.channelTitle ?? channel.channelUrl}
-              {/* Independent by design: LiveStatus reflects YouTube's actual state
-            (set only from live-checks), RecordingStatus reflects this app's
-            action -- a paused channel that's still airing shows LIVE here
-            alongside PAUSED below, at the same time. */}
+              <span className="truncate">{channel.channelTitle ?? channel.channelUrl}</span>
+              <ExternalLink className="h-3 w-3 shrink-0 text-gray-600 opacity-0 transition-opacity group-hover/link:opacity-100" />
             </a>
             <StatusBadge status={channel.liveStatus} />
             {/* While a job is in flight, its finer-grained status (RECORDING /
               PROCESSING / UPLOADING) is more informative than the channel's
               own coarser RecordingStatus; otherwise fall back to it. */}
-            <StatusBadge
-              status={activeJob?.status ?? channel.recordingStatus}
-            />
+            <StatusBadge status={activeJob?.status ?? channel.recordingStatus} />
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-400">
-            <span>Uploads to: {channel.uploadConfig?.label ?? "unknown"}</span>
-            <span className="hidden sm:inline">&middot;</span>
-            <span>Visibility: {channel.defaultVisibility.toLowerCase()}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+            <span className="inline-flex items-center gap-1">
+              <UploadCloud className="h-3 w-3" />
+              {channel.uploadConfig?.label ?? 'unknown'}
+            </span>
+            <span className="inline-flex items-center gap-1 capitalize">
+              {channel.defaultVisibility === 'PRIVATE' ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+              {channel.defaultVisibility.toLowerCase()}
+            </span>
             {channel.playlistTitle && (
-              <>
-                <span className="hidden sm:inline">&middot;</span>
-                <span>Playlist: {channel.playlistTitle}</span>
-              </>
+              <span className="inline-flex items-center gap-1 truncate">
+                <ListMusic className="h-3 w-3 shrink-0" />
+                <span className="truncate">{channel.playlistTitle}</span>
+              </span>
             )}
           </div>
           {channel.lastError && (
-            <p className="mt-1 text-xs text-rose-400">{channel.lastError}</p>
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-rose-400">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              {channel.lastError}
+            </p>
           )}
         </div>
       </div>
@@ -110,48 +123,34 @@ export function ChannelCard({
             href={lastUnlistedUrl}
             target="_blank"
             rel="noreferrer"
-            className="rounded-md px-3 py-1.5 text-xs font-medium text-indigo-300 hover:bg-gray-800"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-indigo-300 transition-colors hover:bg-white/[0.06]"
           >
-            Last Unlisted Livestream
+            <PlayCircle className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Last Unlisted Livestream</span>
+            <span className="md:hidden">Last upload</span>
           </a>
         ) : (
-          <button
-            disabled
+          <span
             title="The most recent completed upload for this channel isn't unlisted"
-            className="cursor-not-allowed rounded-md px-2 py-1.5 text-xs font-medium text-gray-600"
+            className="hidden items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 sm:inline-flex"
           >
-            Last Unlisted Livestream
-          </button>
+            <PlayCircle className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Last Unlisted Livestream</span>
+          </span>
         )}
 
-        {canManage && activeJob?.status === "RECORDING" && (
-          <button
-            onClick={stopRecording}
-            className="rounded-md px-2.5 py-1.5 text-xs font-medium text-amber-400 hover:bg-gray-800"
-          >
-            Stop recording
-          </button>
-        )}
         {canManage && (
-          <div className="flex flex-wrap items-center">
-            <button
-              onClick={onEdit}
-              className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-800"
-            >
-              Edit
-            </button>
-            <button
+          <div className="flex items-center gap-1">
+            {isRecording && (
+              <IconButton icon={<Square className="h-4 w-4" />} label="Stop recording & upload now" variant="ghost-danger" onClick={stopRecording} />
+            )}
+            <IconButton icon={<Pencil className="h-4 w-4" />} label="Edit channel settings" onClick={onEdit} />
+            <IconButton
+              icon={channel.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              label={channel.isActive ? 'Pause monitoring' : 'Resume monitoring'}
               onClick={toggleActive}
-              className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-800"
-            >
-              {channel.isActive ? "Pause" : "Resume"}
-            </button>
-            <button
-              onClick={remove}
-              className="rounded-md px-2.5 py-1.5 text-xs font-medium text-rose-400 hover:bg-gray-800"
-            >
-              Remove
-            </button>
+            />
+            <IconButton icon={<Trash2 className="h-4 w-4" />} label="Remove channel" variant="ghost-danger" onClick={remove} />
           </div>
         )}
       </div>

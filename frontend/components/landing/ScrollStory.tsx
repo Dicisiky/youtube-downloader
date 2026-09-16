@@ -51,10 +51,34 @@ export function ScrollStory() {
 
   const beat = BEATS[beatIndex];
 
+  function jumpTo(idx: number) {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo({ top: ((idx + 0.5) / BEATS.length) * max, behavior: 'smooth' });
+  }
+
   return (
     <div style={{ height: `${TOTAL_VH}vh` }} className="relative">
       <div className="fixed inset-0">
         <LandingHeader />
+
+        {/* Beat progress -- also doubles as quick navigation through the story. */}
+        <div className="fixed right-5 top-1/2 z-20 hidden -translate-y-1/2 flex-col gap-3 sm:flex">
+          {BEATS.map((b, i) => (
+            <button
+              key={b.title}
+              onClick={() => jumpTo(i)}
+              aria-label={`Jump to "${b.title}"`}
+              aria-current={i === beatIndex}
+              className="group flex items-center justify-end"
+            >
+              <span
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === beatIndex ? 'w-6 bg-indigo-400' : 'w-1.5 bg-white/20 group-hover:bg-white/40'
+                }`}
+              />
+            </button>
+          ))}
+        </div>
 
         {/* Full-bleed 3D backdrop -- the racks/module fill the whole frame instead of sharing it with a text column. */}
         <div className="absolute inset-0">

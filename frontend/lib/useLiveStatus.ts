@@ -6,10 +6,15 @@ import type { MonitoredChannel, RecordingJob, ServerEvent } from './types';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:4000/ws';
 const RECONNECT_DELAY_MS = 3000;
 
+export interface LogEntry {
+  message: string;
+  level: 'info' | 'warn' | 'error';
+}
+
 export interface LiveState {
   channels: Record<string, MonitoredChannel>;
   jobs: Record<string, RecordingJob>;
-  logs: string[];
+  logs: LogEntry[];
   connected: boolean;
 }
 
@@ -77,7 +82,7 @@ export function useLiveStatus(seed: { channels: MonitoredChannel[]; jobs: Record
             case 'job.updated':
               return { ...s, jobs: { ...s.jobs, [event.payload.id]: event.payload } };
             case 'log':
-              return { ...s, logs: [...s.logs.slice(-199), event.payload.message] };
+              return { ...s, logs: [...s.logs.slice(-199), event.payload] };
             default:
               return s;
           }

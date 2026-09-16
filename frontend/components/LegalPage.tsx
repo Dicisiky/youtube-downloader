@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 
 export function LegalPage({
   title,
@@ -10,9 +11,10 @@ export function LegalPage({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto max-w-2xl px-6 py-12">
-      <Link href="/" className="text-sm text-gray-500 hover:text-gray-300">
-        ← Back to Home page
+    <main className="mx-auto min-h-screen max-w-2xl bg-canvas px-6 py-12">
+      <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-300">
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to Home page
       </Link>
 
       <h1 className="mt-4 text-2xl font-bold text-gray-100">{title}</h1>

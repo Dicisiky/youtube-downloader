@@ -1,8 +1,12 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { AlertCircle, Eye, ListMusic, Settings2, UploadCloud } from 'lucide-react';
 import type { MonitoredChannel, Playlist, UploadConfig, Visibility } from '../lib/types';
 import { api } from '../lib/api';
+import { Modal } from './ui/Modal';
+import { Button } from './ui/Button';
+import { FieldLabel, selectClasses, SelectWrapper } from './ui/Field';
 
 interface Props {
   channel: MonitoredChannel | null;
@@ -76,8 +80,6 @@ export function EditChannelModal({ channel, uploadConfigs, onClose, onSaved }: P
     };
   }, [uploadConfigId]);
 
-  if (!channel) return null;
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!channel) return;
@@ -101,35 +103,35 @@ export function EditChannelModal({ channel, uploadConfigs, onClose, onSaved }: P
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-xl sm:p-6">
-        <h2 className="text-lg font-semibold text-gray-100">Edit {channel.channelTitle ?? channel.channelUrl}</h2>
-        <p className="mt-1 text-sm text-gray-400">Changes apply to future uploads -- an upload already in progress keeps its original settings.</p>
-
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Upload destination</label>
-            <select
-              required
-              value={uploadConfigId}
-              onChange={(e) => setUploadConfigId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
-            >
+    <Modal
+      open={!!channel}
+      onClose={onClose}
+      icon={<Settings2 className="h-5 w-5" />}
+      title={channel ? `Edit ${channel.channelTitle ?? channel.channelUrl}` : 'Edit channel'}
+      description="Changes apply to future uploads -- an upload already in progress keeps its original settings."
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <FieldLabel icon={<UploadCloud className="h-3.5 w-3.5 text-gray-500" />}>Upload destination</FieldLabel>
+          <SelectWrapper>
+            <select required value={uploadConfigId} onChange={(e) => setUploadConfigId(e.target.value)} className={selectClasses}>
               {uploadConfigs.map((cfg) => (
                 <option key={cfg.id} value={cfg.id}>
                   {cfg.label} {cfg.youtubeChannelTitle ? `(${cfg.youtubeChannelTitle})` : ''}
                 </option>
               ))}
             </select>
-          </div>
+          </SelectWrapper>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Playlist (optional)</label>
+        <div>
+          <FieldLabel icon={<ListMusic className="h-3.5 w-3.5 text-gray-500" />}>Playlist (optional)</FieldLabel>
+          <SelectWrapper>
             <select
               value={playlistId}
               onChange={(e) => setPlaylistId(e.target.value)}
               disabled={!uploadConfigId || loadingPlaylists}
-              className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+              className={selectClasses}
             >
               <option value="">No playlist</option>
               {playlists.map((p) => (
@@ -138,45 +140,41 @@ export function EditChannelModal({ channel, uploadConfigs, onClose, onSaved }: P
                 </option>
               ))}
             </select>
-            {loadingPlaylists && <p className="mt-1 text-xs text-gray-500">Loading playlists…</p>}
-            {playlistsError && (
-              <p className="mt-1 text-xs text-amber-400">Couldn&apos;t load playlists: {playlistsError}</p>
-            )}
-          </div>
+          </SelectWrapper>
+          {loadingPlaylists && <p className="mt-1.5 text-xs text-gray-500">Loading playlists…</p>}
+          {playlistsError && (
+            <p className="mt-1.5 flex items-center gap-1 text-xs text-amber-400">
+              <AlertCircle className="h-3 w-3" /> Couldn&apos;t load playlists: {playlistsError}
+            </p>
+          )}
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Default visibility</label>
-            <select
-              value={visibility}
-              onChange={(e) => setVisibility(e.target.value as Visibility)}
-              className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
-            >
+        <div>
+          <FieldLabel icon={<Eye className="h-3.5 w-3.5 text-gray-500" />}>Default visibility</FieldLabel>
+          <SelectWrapper>
+            <select value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)} className={selectClasses}>
               <option value="PUBLIC">Public</option>
               <option value="UNLISTED">Unlisted</option>
               <option value="PRIVATE">Private</option>
             </select>
-          </div>
+          </SelectWrapper>
+        </div>
 
-          {error && <p className="text-sm text-rose-400">{error}</p>}
+        {error && (
+          <p className="flex items-center gap-1.5 text-sm text-rose-400">
+            <AlertCircle className="h-4 w-4 shrink-0" /> {error}
+          </p>
+        )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-            >
-              {submitting ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={submitting}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
