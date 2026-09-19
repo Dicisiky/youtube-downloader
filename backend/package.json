@@ -12,7 +12,8 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "docker": "docker compose -f ../docker-compose.yml up --build --abort-on-container-exit backend postgres"
+    "docker": "docker compose -f ../docker-compose.yml up --build --abort-on-container-exit backend postgres",
+    "test": "jest"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.4",

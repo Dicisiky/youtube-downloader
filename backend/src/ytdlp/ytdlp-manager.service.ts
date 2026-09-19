@@ -6,6 +6,7 @@ import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { promisify } from 'util';
 import { resolveCookieArgs } from './ytdlp-cookies.util';
+import { isRateLimited } from './ytdlp-errors.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -33,6 +34,10 @@ const MAX_AUTO_RESTARTS = 6;
 // which commonly take 1-2 minutes to clear on their own.
 const RESTART_BACKOFF_BASE_MS = 5000;
 const RESTART_BACKOFF_MAX_MS = 30000;
+// Flat, much longer wait before restarting after a rate-limited exit -- see
+// isRateLimited(). A rolling rate-limit window doesn't clear in 30s; hammering
+// it on the normal exponential schedule just keeps extending the block.
+const RATE_LIMIT_BACKOFF_MS = 60_000;
 
 /**
  * Owns every live yt-dlp child process. One instance per active RecordingJob.
@@ -194,7 +199,14 @@ export class YtdlpManagerService {
       // retries fragments internally; a full-process restart is our fallback
       // for cases where the whole connection died (e.g. Wi-Fi drop).
       if (restartCount < MAX_AUTO_RESTARTS) {
-        const delay = Math.min(RESTART_BACKOFF_BASE_MS * 2 ** restartCount, RESTART_BACKOFF_MAX_MS);
+        // A rate limit (HTTP 429, surfacing here as yt-dlp's generic "page
+        // needs to be reloaded" once --no-warnings hides the line that names
+        // it) needs a real cool-down, not the same short backoff used for an
+        // ordinary dropped connection -- restarting every few seconds just
+        // keeps adding requests to the budget that's already exhausted.
+        const delay = isRateLimited(lastErrorLine)
+          ? RATE_LIMIT_BACKOFF_MS
+          : Math.min(RESTART_BACKOFF_BASE_MS * 2 ** restartCount, RESTART_BACKOFF_MAX_MS);
         this.logger.warn(
           `[${jobId}] yt-dlp exited with code ${code} (${lastErrorLine}); restarting in ${delay}ms (${restartCount + 1}/${MAX_AUTO_RESTARTS})`,
         );

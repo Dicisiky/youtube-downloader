@@ -4,6 +4,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { google } from 'googleapis';
 import { resolveCookieArgs } from '../ytdlp/ytdlp-cookies.util';
+import { isRateLimited } from '../ytdlp/ytdlp-errors.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -96,7 +97,46 @@ export class YoutubeLiveService {
    * yt-dlp reports a clean, unambiguous "channel is not currently live"
    * error when there's no active stream, rather than an ambiguous empty match.
    */
+  /**
+   * Retries a couple of times on ordinary transient failures before giving
+   * up: this shells out to yt-dlp against the same shared cookie profile that
+   * concurrent recordings (and the cookie-keepalive cron) also read from, so
+   * a brief lock/contention blip here is expected occasionally, not
+   * exceptional -- and the caller's fallback for "this check failed" is
+   * exactly the kind of truncated/duplicate recording this method exists to
+   * prevent.
+   *
+   * A rate-limit error (HTTP 429) is deliberately NOT retried on this fast
+   * cadence: it means the shared identity is already over budget, and firing
+   * 2 more requests within seconds only adds to that budget instead of
+   * waiting it out. It's surfaced immediately so the caller can fall back to
+   * its own, much longer-spaced retry cadence instead.
+   */
   async getActiveLiveBroadcast(channelId: string): Promise<LiveBroadcastInfo | null> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.checkLiveOnce(channelId);
+      } catch (err) {
+        const message = (err as Error).message;
+        if (isRateLimited(message)) {
+          this.logger.warn(`live-status check for ${channelId} is rate-limited -- not retrying immediately: ${message}`);
+          throw err;
+        }
+        if (attempt === maxAttempts) {
+          this.logger.error(`live-status check failed for ${channelId} after ${maxAttempts} attempts`, err as Error);
+          throw err;
+        }
+        this.logger.warn(
+          `live-status check for ${channelId} failed (attempt ${attempt}/${maxAttempts}), retrying: ${message}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
+    throw new Error('unreachable');
+  }
+
+  private async checkLiveOnce(channelId: string): Promise<LiveBroadcastInfo | null> {
     const binary = this.config.get<string>('ytdlp.binaryPath')!;
     // Prefers the persistent Chromium profile (self-refreshing session) over
     // the static cookies.txt snapshot -- see ytdlp-cookies.util.ts.
@@ -138,7 +178,6 @@ export class YoutubeLiveService {
       // whose /live URL currently points at a scheduled premiere that hasn't
       // started airing yet ("will begin in N minutes"/"Premieres in N minutes").
       if (/not currently live/i.test(message) || /(?:will begin|premieres) in/i.test(message)) return null;
-      this.logger.error(`live-status check failed for ${channelId}`, err as Error);
       throw err;
     } finally {
       cleanupCookies();
