@@ -123,16 +123,14 @@ export class RecordingOrchestratorService {
         }
       }
 
-      await this.jobs.updateStatus(jobId, JobStatus.FAILED, { errorMessage: result.error });
-      // RecordingStatus=ERROR reflects OUR pipeline failing -- it says nothing
-      // about whether the broadcast itself is still live, so LiveStatus is
-      // deliberately left untouched; the next poll tick will correct it.
-      await this.updateChannelState(channel.id, {
-        recordingStatus: RecordingStatus.ERROR,
-        currentVideoId: null,
-        lastError: result.error ?? null,
-      });
-      this.ytdlp.clearSegments(jobId);
+      // Out of continuations. Whatever got captured before yt-dlp gave up is
+      // still sitting on disk as segment files -- salvage those the same way
+      // a genuine stream-end would, instead of abandoning them there unwatched
+      // (which is what previously left a stray .seg0.* file needing a manual
+      // cleanup on the VPS). finalizeRecording already fails the job itself,
+      // with RecordingStatus=ERROR, if there's truly nothing on disk to find.
+      this.logger.warn(`[${jobId}] giving up after repeated failures (${result.error}) -- salvaging whatever was captured`);
+      await this.finalizeRecording(channel, jobId, recordingOptions, false);
       return;
     }
 
