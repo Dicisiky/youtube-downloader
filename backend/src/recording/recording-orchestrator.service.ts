@@ -108,20 +108,18 @@ export class RecordingOrchestratorService {
       // (not a transient YouTube hiccup) still surfaces as FAILED eventually
       // instead of retrying forever.
       if (stillExists.retryCount < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES) {
-        try {
-          const stillLive = await this.youtubeLive.getActiveLiveBroadcast(channel.channelId);
-          if (stillLive && stillLive.videoId === recordingOptions.videoId) {
-            this.logger.warn(
-              `[${jobId}] yt-dlp exhausted its local retries (${result.error}) but the same broadcast is still airing -- continuing as a new segment instead of failing the job`,
-            );
-            await this.jobs.incrementRetryCount(jobId);
-            this.ytdlp.continueSegment(recordingOptions);
-            return;
-          }
-        } catch (err) {
+        const stillLive = await this.checkStillLive(channel.channelId, recordingOptions.videoId);
+        // An inconclusive check (null) is treated the same as "still live":
+        // the re-check itself failing is exactly the scenario this exists to
+        // survive, not a reason to fall back to the old truncate-and-upload
+        // behavior.
+        if (stillLive !== false) {
           this.logger.warn(
-            `live re-check after exhausted retries failed for ${channel.channelId}, failing job ${jobId} anyway: ${(err as Error).message}`,
+            `[${jobId}] yt-dlp exhausted its local retries (${result.error}) and live status is ${stillLive === null ? 'unknown' : 'still live'} -- continuing as a new segment instead of failing the job`,
           );
+          await this.jobs.incrementRetryCount(jobId);
+          this.ytdlp.continueSegment(recordingOptions);
+          return;
         }
       }
 
@@ -150,18 +148,31 @@ export class RecordingOrchestratorService {
       // false alarm, so record the continuation as a new segment of this job
       // instead of uploading a truncated clip (which is what previously
       // caused one livestream to get uploaded as several separate videos).
-      try {
-        const stillLive = await this.youtubeLive.getActiveLiveBroadcast(channel.channelId);
-        if (stillLive && stillLive.videoId === recordingOptions.videoId) {
-          this.ytdlp.continueSegment(recordingOptions);
-          return;
-        }
-        confirmedOffline = true;
-      } catch (err) {
-        this.logger.warn(
-          `live re-check failed for ${channel.channelId}, finalizing as ended anyway: ${(err as Error).message}`,
-        );
+      const stillLive = await this.checkStillLive(channel.channelId, recordingOptions.videoId);
+      if (stillLive === true) {
+        // Confirmed still airing -- uncapped, same as ever: a long stream can
+        // have any number of these false-alarm clean exits.
+        this.ytdlp.continueSegment(recordingOptions);
+        return;
       }
+      if (stillLive === null && stillExists.retryCount < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES) {
+        // Couldn't get a confirmed answer at all -- leaning toward "assume
+        // still live" here is what this whole re-check exists for; assuming
+        // the opposite is exactly what used to truncate a healthy stream into
+        // a separate upload. Capped so a channel that's genuinely offline
+        // (and erroring on every re-check) still finalizes eventually.
+        this.logger.warn(
+          `[${jobId}] live re-check inconclusive after a clean exit -- continuing as a new segment rather than risking a truncated upload`,
+        );
+        await this.jobs.incrementRetryCount(jobId);
+        this.ytdlp.continueSegment(recordingOptions);
+        return;
+      }
+      // Either confirmed offline/different broadcast, or the inconclusive
+      // budget above is exhausted -- finalize with whatever was captured.
+      // Only a *confirmed* negative answer justifies marking LiveStatus
+      // OFFLINE; running out of patience on an unknown does not.
+      confirmedOffline = stillLive === false;
     }
     // A manual_stop leaves confirmedOffline=false -- the operator chose to
     // stop capturing early, which says nothing about whether the stream is
@@ -242,6 +253,23 @@ export class RecordingOrchestratorService {
         });
       }
       this.ytdlp.clearSegments(jobId);
+    }
+  }
+
+  /**
+   * Tri-state liveness re-check: true (confirmed same broadcast), false
+   * (confirmed ended or a different broadcast now), or null (the check
+   * itself kept failing even after getActiveLiveBroadcast's own retries).
+   * Centralized here because both call sites above need to treat null the
+   * same way -- as grounds to keep going, not as a green light to finalize.
+   */
+  private async checkStillLive(channelId: string, videoId: string): Promise<boolean | null> {
+    try {
+      const live = await this.youtubeLive.getActiveLiveBroadcast(channelId);
+      return !!live && live.videoId === videoId;
+    } catch (err) {
+      this.logger.warn(`live re-check errored for ${channelId}, treating as unknown: ${(err as Error).message}`);
+      return null;
     }
   }
 
