@@ -5,6 +5,7 @@ import { promisify } from 'util';
 import { google } from 'googleapis';
 import { resolveCookieArgs } from '../ytdlp/ytdlp-cookies.util';
 import { isRateLimited } from '../ytdlp/ytdlp-errors.util';
+import { CookieIdentityPoolService } from '../ytdlp/cookie-identity-pool.service';
 
 const execFileAsync = promisify(execFile);
 
@@ -30,7 +31,10 @@ export class YoutubeLiveService {
   private readonly logger = new Logger(YoutubeLiveService.name);
   private readonly youtube;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly identityPool: CookieIdentityPoolService,
+  ) {
     this.youtube = google.youtube({
       version: 'v3',
       auth: this.config.get<string>('youtubeApiKey'),
@@ -96,27 +100,29 @@ export class YoutubeLiveService {
    * the actual recording -- instead of reinventing that page-parsing logic.
    * yt-dlp reports a clean, unambiguous "channel is not currently live"
    * error when there's no active stream, rather than an ambiguous empty match.
-   */
-  /**
-   * Retries a couple of times on ordinary transient failures before giving
-   * up: this shells out to yt-dlp against the same shared cookie profile that
-   * concurrent recordings (and the cookie-keepalive cron) also read from, so
-   * a brief lock/contention blip here is expected occasionally, not
-   * exceptional -- and the caller's fallback for "this check failed" is
-   * exactly the kind of truncated/duplicate recording this method exists to
-   * prevent.
    *
-   * A rate-limit error (HTTP 429) is deliberately NOT retried on this fast
-   * cadence: it means the shared identity is already over budget, and firing
-   * 2 more requests within seconds only adds to that budget instead of
-   * waiting it out. It's surfaced immediately so the caller can fall back to
-   * its own, much longer-spaced retry cadence instead.
+   * Retries a couple of times on ordinary transient failures before giving
+   * up: a brief lock/contention blip on a shared cookie identity is expected
+   * occasionally, not exceptional -- and the caller's fallback for "this
+   * check failed" is exactly the kind of truncated/duplicate recording this
+   * method exists to prevent. A rate-limit error (HTTP 429) is deliberately
+   * NOT retried on this fast cadence: it means the identity used is already
+   * over budget, and firing 2 more requests within seconds only adds to that
+   * budget instead of waiting it out. It's surfaced immediately so the caller
+   * can fall back to its own, much longer-spaced retry cadence instead.
+   *
+   * `preferredIdentity` pins this check to a specific cookie identity (e.g.
+   * the one a currently-recording job already holds, from
+   * CookieIdentityPoolService.getForJob) instead of round-robining across the
+   * pool -- a re-check on a channel already being recorded should ride the
+   * same identity that recording is using, not borrow a different one.
    */
-  async getActiveLiveBroadcast(channelId: string): Promise<LiveBroadcastInfo | null> {
+  async getActiveLiveBroadcast(channelId: string, preferredIdentity?: string): Promise<LiveBroadcastInfo | null> {
+    const identity = preferredIdentity ?? this.identityPool.acquireForCheck();
     const maxAttempts = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await this.checkLiveOnce(channelId);
+        return await this.checkLiveOnce(channelId, identity);
       } catch (err) {
         const message = (err as Error).message;
         if (isRateLimited(message)) {
@@ -136,12 +142,15 @@ export class YoutubeLiveService {
     throw new Error('unreachable');
   }
 
-  private async checkLiveOnce(channelId: string): Promise<LiveBroadcastInfo | null> {
+  private async checkLiveOnce(channelId: string, identity: string | undefined): Promise<LiveBroadcastInfo | null> {
     const binary = this.config.get<string>('ytdlp.binaryPath')!;
     // Prefers the persistent Chromium profile (self-refreshing session) over
-    // the static cookies.txt snapshot -- see ytdlp-cookies.util.ts.
+    // the static cookies.txt snapshot -- see ytdlp-cookies.util.ts. `identity`
+    // is a specific pool-assigned profile dir when one was resolved above;
+    // resolveCookieArgs falls back to the legacy single-profile/cookies.txt
+    // config when it's undefined (no pool configured).
     const { args: cookieArgs, cleanup: cleanupCookies } = resolveCookieArgs({
-      browserProfileDir: this.config.get<string>('ytdlp.browserProfileDir'),
+      browserProfileDir: identity ?? this.config.get<string>('ytdlp.browserProfileDir'),
       cookiesFile: this.config.get<string>('ytdlp.cookiesFile'),
     });
     try {

@@ -28,7 +28,16 @@ export default () => ({
     // this profile's own cookie store via --cookies-from-browser, so the
     // session keeps rotating/refreshing itself the same way it would in a
     // real browser, instead of going stale like a one-time exported file.
+    // Used as a single-identity fallback when browserProfilesDir (below)
+    // isn't set, so an un-migrated deployment behaves exactly as before.
     browserProfileDir: process.env.YTDLP_BROWSER_PROFILE_DIR ?? '',
+    // Directory containing one subdirectory per independent, already-logged-in
+    // Google identity (e.g. chrome-profiles/1, chrome-profiles/2, ...) --
+    // see CookieIdentityPoolService. Concurrent recordings each get their own
+    // identity for their whole lifetime instead of all sharing one Google
+    // account's YouTube rate-limit budget. Optional: add identities to this
+    // pool at any time, no restart-time count to configure.
+    browserProfilesDir: process.env.YTDLP_BROWSER_PROFILES_DIR ?? '',
   },
   poll: {
     intervalMs: parseInt(process.env.POLL_INTERVAL_MS ?? '60000', 10),

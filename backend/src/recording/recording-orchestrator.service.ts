@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { RecordingJobsService } from '../recording-jobs/recording-jobs.service';
 import { YtdlpManagerService, StartRecordingOptions, RecordingExitReason } from '../ytdlp/ytdlp-manager.service';
+import { CookieIdentityPoolService } from '../ytdlp/cookie-identity-pool.service';
 import { YoutubeUploadService } from '../youtube/youtube-upload.service';
 import { YoutubeLiveService } from '../youtube/youtube-live.service';
 import type { MonitoredChannel } from '@prisma/client';
@@ -37,6 +38,7 @@ export class RecordingOrchestratorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ytdlp: YtdlpManagerService,
+    private readonly identityPool: CookieIdentityPoolService,
     private readonly upload: YoutubeUploadService,
     private readonly youtubeLive: YoutubeLiveService,
     private readonly jobs: RecordingJobsService,
@@ -108,7 +110,7 @@ export class RecordingOrchestratorService {
       // (not a transient YouTube hiccup) still surfaces as FAILED eventually
       // instead of retrying forever.
       if (stillExists.retryCount < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES) {
-        const stillLive = await this.checkStillLive(channel.channelId, recordingOptions.videoId);
+        const stillLive = await this.checkStillLive(channel.channelId, recordingOptions.videoId, jobId);
         // An inconclusive check (null) is treated the same as "still live":
         // the re-check itself failing is exactly the scenario this exists to
         // survive, not a reason to fall back to the old truncate-and-upload
@@ -146,7 +148,7 @@ export class RecordingOrchestratorService {
       // false alarm, so record the continuation as a new segment of this job
       // instead of uploading a truncated clip (which is what previously
       // caused one livestream to get uploaded as several separate videos).
-      const stillLive = await this.checkStillLive(channel.channelId, recordingOptions.videoId);
+      const stillLive = await this.checkStillLive(channel.channelId, recordingOptions.videoId, jobId);
       if (stillLive === true) {
         // Confirmed still airing -- uncapped, same as ever: a long stream can
         // have any number of these false-alarm clean exits.
@@ -260,10 +262,15 @@ export class RecordingOrchestratorService {
    * itself kept failing even after getActiveLiveBroadcast's own retries).
    * Centralized here because both call sites above need to treat null the
    * same way -- as grounds to keep going, not as a green light to finalize.
+   *
+   * Passes the job's OWN cookie identity (already assigned when its
+   * recording started) into the check, rather than letting it round-robin
+   * across the pool -- a re-check on a channel this job is already recording
+   * should ride that same identity, not add load to a different one.
    */
-  private async checkStillLive(channelId: string, videoId: string): Promise<boolean | null> {
+  private async checkStillLive(channelId: string, videoId: string, jobId: string): Promise<boolean | null> {
     try {
-      const live = await this.youtubeLive.getActiveLiveBroadcast(channelId);
+      const live = await this.youtubeLive.getActiveLiveBroadcast(channelId, this.identityPool.getForJob(jobId));
       return !!live && live.videoId === videoId;
     } catch (err) {
       this.logger.warn(`live re-check errored for ${channelId}, treating as unknown: ${(err as Error).message}`);

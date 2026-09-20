@@ -7,6 +7,7 @@ import { join } from 'path';
 import { promisify } from 'util';
 import { resolveCookieArgs } from './ytdlp-cookies.util';
 import { isRateLimited } from './ytdlp-errors.util';
+import { CookieIdentityPoolService } from './cookie-identity-pool.service';
 
 const execFileAsync = promisify(execFile);
 
@@ -55,7 +56,10 @@ export class YtdlpManagerService {
   // continueSegment() below for why a single livestream can span more than one.
   private readonly segmentIndex = new Map<string, number>();
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly identityPool: CookieIdentityPoolService,
+  ) {}
 
   /** Naming pattern (<slug>__<videoId>.segN.<ext>) is also relied on by the orchestrator's finalize/concat step. */
   private outputPathFor(channelSlug: string, videoId: string, segment: number): string {
@@ -98,10 +102,13 @@ export class YtdlpManagerService {
     const { jobId, videoId, channelSlug } = opts;
     const binary = this.config.get<string>('ytdlp.binaryPath')!;
     const ffmpeg = this.config.get<string>('ytdlp.ffmpegPath')!;
-    // Prefers the persistent Chromium profile (self-refreshing session) over
-    // the static cookies.txt snapshot -- see ytdlp-cookies.util.ts.
+    // Sticky for the job's whole lifetime -- every segment/restart of the
+    // same job gets the SAME identity from the pool, never a different one
+    // mid-recording. See CookieIdentityPoolService; falls back to the legacy
+    // single-profile/cookies.txt config when no pool is configured.
+    const identity = this.identityPool.acquireForJob(jobId);
     const { args: cookieArgs, cleanup: cleanupCookies } = resolveCookieArgs({
-      browserProfileDir: this.config.get<string>('ytdlp.browserProfileDir'),
+      browserProfileDir: identity ?? this.config.get<string>('ytdlp.browserProfileDir'),
       cookiesFile: this.config.get<string>('ytdlp.cookiesFile'),
     });
     const outputTemplate = this.outputPathFor(channelSlug, videoId, segment);
@@ -272,9 +279,10 @@ export class YtdlpManagerService {
     for (const jobId of this.active.keys()) this.stop(jobId);
   }
 
-  /** Call once a job has truly finished (finalized or failed for good) to drop its segment counter. */
+  /** Call once a job has truly finished (finalized or failed for good) to drop its segment counter and free its cookie identity back to the pool. */
   clearSegments(jobId: string): void {
     this.segmentIndex.delete(jobId);
+    this.identityPool.releaseJob(jobId);
   }
 
   /**

@@ -53,6 +53,7 @@ function makeHarness() {
 
   const upload = { upload: jest.fn().mockResolvedValue('uploaded-video-id') };
   const youtubeLive = { getActiveLiveBroadcast: jest.fn() };
+  const identityPool = { getForJob: jest.fn().mockReturnValue(undefined) };
 
   const jobs = {
     create: jest.fn(),
@@ -69,13 +70,14 @@ function makeHarness() {
   const orchestrator = new RecordingOrchestratorService(
     prisma as any,
     ytdlp as any,
+    identityPool as any,
     upload as any,
     youtubeLive as any,
     jobs as any,
     events as any,
   );
 
-  return { orchestrator: orchestrator as any, prisma, ytdlp, upload, youtubeLive, jobs, events };
+  return { orchestrator: orchestrator as any, prisma, ytdlp, identityPool, upload, youtubeLive, jobs, events };
 }
 
 const CONTENTION_ERROR = new Error('cookie database is locked');
@@ -216,5 +218,21 @@ describe('RecordingOrchestratorService - liveness re-check under contention', ()
 
     expect(upload.upload).not.toHaveBeenCalled();
     expect(jobs.updateStatus).toHaveBeenCalledWith('job-1', JobStatus.FAILED, expect.anything());
+  });
+
+  it("re-checks a channel using the job's own already-assigned cookie identity, not a different one from the pool", async () => {
+    const { orchestrator, youtubeLive, identityPool } = makeHarness();
+    identityPool.getForJob.mockReturnValue('/secrets/chrome-profiles/2');
+    youtubeLive.getActiveLiveBroadcast.mockResolvedValue(null);
+
+    await orchestrator.handleRecordingExit(
+      makeChannel(),
+      'job-1',
+      { success: true, filePath: '/recordings/seg0.mp4', reason: 'stream_ended' },
+      { jobId: 'job-1', videoId: 'video-1', channelSlug: 'Test Channel' },
+    );
+
+    expect(identityPool.getForJob).toHaveBeenCalledWith('job-1');
+    expect(youtubeLive.getActiveLiveBroadcast).toHaveBeenCalledWith('UC_test', '/secrets/chrome-profiles/2');
   });
 });
