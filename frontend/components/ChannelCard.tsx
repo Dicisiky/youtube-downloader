@@ -1,11 +1,23 @@
-'use client';
+"use client";
 
-import { AlertTriangle, ExternalLink, ListMusic, Pause, Pencil, Play, PlayCircle, Square, Trash2, UploadCloud, Video } from 'lucide-react';
-import type { MonitoredChannel, RecordingJob } from '../lib/types';
-import { StatusBadge } from './StatusBadge';
-import { api } from '../lib/api';
-import { IconButton } from './ui/Button';
-import { useConfirmDialog } from './ui/ConfirmDialog';
+import {
+  AlertTriangle,
+  ExternalLink,
+  ListMusic,
+  Pause,
+  Pencil,
+  Play,
+  PlayCircle,
+  Square,
+  Trash2,
+  UploadCloud,
+  Video,
+} from "lucide-react";
+import type { MonitoredChannel, RecordingJob } from "../lib/types";
+import { StatusBadge } from "./StatusBadge";
+import { api } from "../lib/api";
+import { IconButton } from "./ui/Button";
+import { useConfirmDialog } from "./ui/ConfirmDialog";
 
 interface Props {
   channel: MonitoredChannel;
@@ -18,7 +30,14 @@ interface Props {
   onEdit: () => void;
 }
 
-export function ChannelCard({ channel, activeJob, lastCompletedJob, canManage, onChanged, onEdit }: Props) {
+export function ChannelCard({
+  channel,
+  activeJob,
+  lastCompletedJob,
+  canManage,
+  onChanged,
+  onEdit,
+}: Props) {
   const { ask, dialog } = useConfirmDialog();
 
   async function toggleActive() {
@@ -28,10 +47,10 @@ export function ChannelCard({ channel, activeJob, lastCompletedJob, canManage, o
 
   async function remove() {
     const ok = await ask({
-      title: 'Remove this channel?',
+      title: "Remove this channel?",
       description: `${channel.channelTitle ?? channel.channelUrl} will stop being monitored and recorded.`,
-      confirmLabel: 'Remove',
-      variant: 'danger',
+      confirmLabel: "Remove",
+      variant: "danger",
     });
     if (!ok) return;
     await api.removeChannel(channel.id);
@@ -40,10 +59,11 @@ export function ChannelCard({ channel, activeJob, lastCompletedJob, canManage, o
 
   async function stopRecording() {
     const ok = await ask({
-      title: 'Stop recording now?',
-      description: 'Whatever has been captured so far will be uploaded immediately.',
-      confirmLabel: 'Stop & upload',
-      variant: 'danger',
+      title: "Stop recording now?",
+      description:
+        "Whatever has been captured so far will be uploaded immediately.",
+      confirmLabel: "Stop & upload",
+      variant: "danger",
     });
     if (!ok) return;
     await api.stopRecording(channel.id);
@@ -53,23 +73,41 @@ export function ChannelCard({ channel, activeJob, lastCompletedJob, canManage, o
   // uploadedVisibility is a snapshot of what visibility THAT specific upload
   // actually used, not the channel's current (possibly since-changed) setting.
   const lastUnlistedUrl =
-    lastCompletedJob?.uploadedVisibility === 'UNLISTED' && lastCompletedJob.destinationVideoId
+    lastCompletedJob?.uploadedVisibility === "UNLISTED" &&
+    lastCompletedJob.destinationVideoId
       ? `https://www.youtube.com/watch?v=${lastCompletedJob.destinationVideoId}`
       : null;
 
-  const isRecording = activeJob?.status === 'RECORDING';
+  // completedAt is set the moment the upload finishes (see recording-orchestrator),
+  // so it doubles as this video's upload date.
+  const lastUnlistedDate =
+    lastUnlistedUrl && lastCompletedJob?.completedAt
+      ? new Date(lastCompletedJob.completedAt).toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : null;
+
+  const isRecording = activeJob?.status === "RECORDING";
 
   return (
     <div
       className={`group flex flex-col gap-3 rounded-xl border bg-surface-raised/60 p-4 transition-all duration-200 hover:bg-surface-hover sm:flex-row sm:items-center sm:justify-between ${
-        isRecording ? 'border-red-500/30' : 'border-white/10 hover:border-white/20'
+        isRecording
+          ? "border-red-500/30"
+          : "border-white/10 hover:border-white/20"
       }`}
     >
       {dialog}
       <div className="flex min-w-0 items-center gap-3">
         {channel.channelThumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={channel.channelThumbnail} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-white/10" />
+          <img
+            src={channel.channelThumbnail}
+            alt=""
+            className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-white/10"
+          />
         ) : (
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/5 text-gray-500 ring-1 ring-white/10">
             <Video className="h-5 w-5" />
@@ -83,22 +121,30 @@ export function ChannelCard({ channel, activeJob, lastCompletedJob, canManage, o
               rel="noreferrer"
               className="group/link inline-flex items-center gap-1 truncate font-medium text-gray-100 hover:text-indigo-300"
             >
-              <span className="truncate">{channel.channelTitle ?? channel.channelUrl}</span>
+              <span className="truncate">
+                {channel.channelTitle ?? channel.channelUrl}
+              </span>
               <ExternalLink className="h-3 w-3 shrink-0 text-gray-600 opacity-0 transition-opacity group-hover/link:opacity-100" />
             </a>
             <StatusBadge status={channel.liveStatus} />
             {/* While a job is in flight, its finer-grained status (RECORDING /
               PROCESSING / UPLOADING) is more informative than the channel's
               own coarser RecordingStatus; otherwise fall back to it. */}
-            <StatusBadge status={activeJob?.status ?? channel.recordingStatus} />
+            <StatusBadge
+              status={activeJob?.status ?? channel.recordingStatus}
+            />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
             <span className="inline-flex items-center gap-1">
               <UploadCloud className="h-3 w-3" />
-              {channel.uploadConfig?.label ?? 'unknown'}
+              {channel.uploadConfig?.label ?? "unknown"}
             </span>
             <span className="inline-flex items-center gap-1 capitalize">
-              {channel.defaultVisibility === 'PRIVATE' ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+              {channel.defaultVisibility === "PRIVATE" ? (
+                <Pause className="h-3 w-3" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
               {channel.defaultVisibility.toLowerCase()}
             </span>
             {channel.playlistTitle && (
@@ -125,6 +171,9 @@ export function ChannelCard({ channel, activeJob, lastCompletedJob, canManage, o
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-indigo-300 transition-colors hover:bg-white/[0.06]"
           >
+            {lastUnlistedDate && (
+              <span className="text-gray-500">{lastUnlistedDate}</span>
+            )}
             <PlayCircle className="h-3.5 w-3.5" />
             <span className="hidden md:inline">Last Unlisted Livestream</span>
             <span className="md:hidden">Last upload</span>
@@ -142,15 +191,37 @@ export function ChannelCard({ channel, activeJob, lastCompletedJob, canManage, o
         {canManage && (
           <div className="flex items-center gap-1">
             {isRecording && (
-              <IconButton icon={<Square className="h-4 w-4" />} label="Stop recording & upload now" variant="ghost-danger" onClick={stopRecording} />
+              <IconButton
+                icon={<Square className="h-4 w-4" />}
+                label="Stop recording & upload now"
+                variant="ghost-danger"
+                onClick={stopRecording}
+              />
             )}
-            <IconButton icon={<Pencil className="h-4 w-4" />} label="Edit channel settings" onClick={onEdit} />
             <IconButton
-              icon={channel.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              label={channel.isActive ? 'Pause monitoring' : 'Resume monitoring'}
+              icon={<Pencil className="h-4 w-4" />}
+              label="Edit channel settings"
+              onClick={onEdit}
+            />
+            <IconButton
+              icon={
+                channel.isActive ? (
+                  <Pause className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )
+              }
+              label={
+                channel.isActive ? "Pause monitoring" : "Resume monitoring"
+              }
               onClick={toggleActive}
             />
-            <IconButton icon={<Trash2 className="h-4 w-4" />} label="Remove channel" variant="ghost-danger" onClick={remove} />
+            <IconButton
+              icon={<Trash2 className="h-4 w-4" />}
+              label="Remove channel"
+              variant="ghost-danger"
+              onClick={remove}
+            />
           </div>
         )}
       </div>
