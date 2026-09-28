@@ -320,7 +320,38 @@ export class YtdlpManagerService {
     writeFileSync(concatListPath, segments.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join('\n'));
 
     try {
-      await execFileAsync(ffmpeg, ['-y', '-f', 'concat', '-safe', '0', '-i', concatListPath, '-c', 'copy', mergedPath]);
+      try {
+        await execFileAsync(ffmpeg, ['-y', '-f', 'concat', '-safe', '0', '-i', concatListPath, '-c', 'copy', mergedPath]);
+      } catch (err) {
+        // A raw stream copy can fail on a malformed/misaligned audio frame at
+        // one of the segment boundaries (confirmed the hard way: 2026-09-28,
+        // ffmpeg's aac_adtstoasc bitstream filter rejecting a bad ADTS header
+        // partway through a multi-hour, many-segment merge). Re-encoding just
+        // the audio track tolerates that instead of raising the same error --
+        // video stays a lossless copy, only audio is decoded/re-encoded, so
+        // this is slower but not another full transcode.
+        this.logger.warn(
+          `[${videoId}] stream-copy merge failed (${(err as Error).message.split('\n')[0]}) -- retrying with audio re-encoded instead of raw-copied`,
+        );
+        await execFileAsync(ffmpeg, [
+          '-y',
+          '-fflags',
+          '+igndts',
+          '-f',
+          'concat',
+          '-safe',
+          '0',
+          '-i',
+          concatListPath,
+          '-c:v',
+          'copy',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '160k',
+          mergedPath,
+        ]);
+      }
       if (!existsSync(mergedPath) || statSync(mergedPath).size === 0) {
         throw new Error('ffmpeg concat produced an empty or missing file');
       }

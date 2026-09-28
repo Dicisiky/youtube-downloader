@@ -194,7 +194,31 @@ export class RecordingOrchestratorService {
   ) {
     await this.jobs.updateStatus(jobId, JobStatus.PROCESSING, { recordingEndedAt: new Date() });
 
-    const finalPath = await this.ytdlp.finalizeSegments(recordingOptions.channelSlug, recordingOptions.videoId);
+    let finalPath: string | null;
+    try {
+      finalPath = await this.ytdlp.finalizeSegments(recordingOptions.channelSlug, recordingOptions.videoId);
+    } catch (err) {
+      // Confirmed the hard way (2026-09-28): an unhandled throw here used to
+      // fall through to startRecording()'s generic top-level logger and stop
+      // right there -- the job stayed at PROCESSING and the channel stayed at
+      // RECORDING forever, since MonitorService skips polling any channel
+      // with an "active" job. That silently stopped monitoring the channel
+      // for every future stream, not just this one. Handling it the same way
+      // as every other terminal case below -- FAILED status, channel state
+      // reset, identity released -- keeps this a one-job failure instead.
+      // Segment files are deliberately left on disk (not cleaned up here) so
+      // a real merge crash can still be recovered by hand.
+      this.logger.error(`[${jobId}] merging recorded segments failed -- marking FAILED instead of leaving the channel stuck`, err as Error);
+      await this.jobs.updateStatus(jobId, JobStatus.FAILED, { errorMessage: `segment merge failed: ${(err as Error).message}` });
+      await this.updateChannelState(channel.id, {
+        recordingStatus: RecordingStatus.ERROR,
+        currentVideoId: null,
+        lastError: 'segment merge failed',
+        ...(confirmedOffline ? { liveStatus: LiveStatus.OFFLINE } : {}),
+      });
+      this.ytdlp.clearSegments(jobId);
+      return;
+    }
     if (!finalPath) {
       await this.jobs.updateStatus(jobId, JobStatus.FAILED, {
         errorMessage: 'Recording finished but the output file could not be located on disk',

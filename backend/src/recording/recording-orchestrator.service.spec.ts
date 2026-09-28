@@ -279,4 +279,35 @@ describe('RecordingOrchestratorService - liveness re-check under contention', ()
     expect(jobs.incrementRetryCount).toHaveBeenCalledWith('job-1');
     expect(upload.upload).not.toHaveBeenCalled();
   });
+
+  it('marks the job FAILED and resets the channel instead of getting stuck when merging segments throws', async () => {
+    // Reproduces the 2026-09-28 incident: ffmpeg's concat crashed on a
+    // corrupted segment boundary, the throw wasn't caught anywhere in the
+    // finalize path, and the job/channel were left at PROCESSING/RECORDING
+    // forever -- MonitorService skips polling any channel with an "active"
+    // job, so that silently stopped monitoring the channel for every future
+    // stream too, not just the one that failed.
+    const { orchestrator, ytdlp, upload, jobs, prisma, events, youtubeLive } = makeHarness();
+    youtubeLive.getActiveLiveBroadcast.mockResolvedValue(null);
+    ytdlp.finalizeSegments.mockRejectedValue(new Error('ffmpeg concat failed: Invalid data found when processing input'));
+
+    await orchestrator.handleRecordingExit(
+      makeChannel(),
+      'job-1',
+      { success: true, filePath: '/recordings/seg0.mp4', reason: 'stream_ended' },
+      { jobId: 'job-1', videoId: 'video-1', channelSlug: 'Test Channel' },
+    );
+
+    expect(upload.upload).not.toHaveBeenCalled();
+    expect(jobs.updateStatus).toHaveBeenCalledWith(
+      'job-1',
+      JobStatus.FAILED,
+      expect.objectContaining({ errorMessage: expect.stringContaining('segment merge failed') }),
+    );
+    expect(prisma.monitoredChannel.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ recordingStatus: 'ERROR', currentVideoId: null }) }),
+    );
+    expect(ytdlp.clearSegments).toHaveBeenCalledWith('job-1');
+    expect(events.broadcast).toHaveBeenCalledWith(expect.objectContaining({ type: 'channel.updated' }));
+  });
 });
