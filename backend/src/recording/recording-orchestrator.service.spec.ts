@@ -53,7 +53,7 @@ function makeHarness() {
 
   const upload = { upload: jest.fn().mockResolvedValue('uploaded-video-id') };
   const youtubeLive = { getActiveLiveBroadcast: jest.fn() };
-  const identityPool = { getForJob: jest.fn().mockReturnValue(undefined) };
+  const identityPool = { getForJob: jest.fn().mockReturnValue(undefined), listIdentities: jest.fn().mockReturnValue([]) };
 
   const jobs = {
     create: jest.fn(),
@@ -234,5 +234,49 @@ describe('RecordingOrchestratorService - liveness re-check under contention', ()
 
     expect(identityPool.getForJob).toHaveBeenCalledWith('job-1');
     expect(youtubeLive.getActiveLiveBroadcast).toHaveBeenCalledWith('UC_test', '/secrets/chrome-profiles/2');
+  });
+
+  it('falls back to another pool identity when the job\'s own identity is the one that\'s blocked, instead of fragmenting', async () => {
+    const { orchestrator, ytdlp, upload, youtubeLive, identityPool } = makeHarness();
+    identityPool.getForJob.mockReturnValue('/secrets/chrome-profiles/2');
+    identityPool.listIdentities.mockReturnValue(['/secrets/chrome-profiles/1', '/secrets/chrome-profiles/2', '/secrets/chrome-profiles/3']);
+    // Identity 2 (this job's own) is bot-blocked; identity 3 is healthy and
+    // confirms the broadcast is still the same one.
+    youtubeLive.getActiveLiveBroadcast.mockImplementation((_channelId: string, identity?: string) => {
+      if (identity === '/secrets/chrome-profiles/2') return Promise.reject(new Error("Sign in to confirm you're not a bot"));
+      return Promise.resolve({ videoId: 'video-1', title: 'Live now' });
+    });
+
+    await orchestrator.handleRecordingExit(
+      makeChannel(),
+      'job-1',
+      { success: true, filePath: '/recordings/seg0.mp4', reason: 'stream_ended' },
+      { jobId: 'job-1', videoId: 'video-1', channelSlug: 'Test Channel' },
+    );
+
+    expect(youtubeLive.getActiveLiveBroadcast).toHaveBeenCalledWith('UC_test', '/secrets/chrome-profiles/2');
+    expect(youtubeLive.getActiveLiveBroadcast).toHaveBeenCalledWith('UC_test', '/secrets/chrome-profiles/1');
+    expect(ytdlp.continueSegment).toHaveBeenCalledTimes(1);
+    expect(ytdlp.finalizeSegments).not.toHaveBeenCalled();
+    expect(upload.upload).not.toHaveBeenCalled();
+  });
+
+  it('only treats liveness as unknown once every identity in the pool has failed', async () => {
+    const { orchestrator, ytdlp, upload, jobs, youtubeLive, identityPool } = makeHarness();
+    identityPool.getForJob.mockReturnValue('/secrets/chrome-profiles/2');
+    identityPool.listIdentities.mockReturnValue(['/secrets/chrome-profiles/1', '/secrets/chrome-profiles/2']);
+    youtubeLive.getActiveLiveBroadcast.mockRejectedValue(CONTENTION_ERROR);
+
+    await orchestrator.handleRecordingExit(
+      makeChannel(),
+      'job-1',
+      { success: true, filePath: '/recordings/seg0.mp4', reason: 'stream_ended' },
+      { jobId: 'job-1', videoId: 'video-1', channelSlug: 'Test Channel' },
+    );
+
+    expect(youtubeLive.getActiveLiveBroadcast).toHaveBeenCalledTimes(2);
+    expect(ytdlp.continueSegment).toHaveBeenCalledTimes(1);
+    expect(jobs.incrementRetryCount).toHaveBeenCalledWith('job-1');
+    expect(upload.upload).not.toHaveBeenCalled();
   });
 });

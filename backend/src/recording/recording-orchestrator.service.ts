@@ -172,6 +172,11 @@ export class RecordingOrchestratorService {
       // budget above is exhausted -- finalize with whatever was captured.
       // Only a *confirmed* negative answer justifies marking LiveStatus
       // OFFLINE; running out of patience on an unknown does not.
+      if (stillLive === null) {
+        this.logger.error(
+          `[${jobId}] live re-check stayed inconclusive across ${stillExists.retryCount} continuations and every identity in the pool -- finalizing with whatever was captured; this WILL fragment the recording if the stream is actually still live`,
+        );
+      }
       confirmedOffline = stillLive === false;
     }
     // A manual_stop leaves confirmedOffline=false -- the operator chose to
@@ -258,24 +263,38 @@ export class RecordingOrchestratorService {
 
   /**
    * Tri-state liveness re-check: true (confirmed same broadcast), false
-   * (confirmed ended or a different broadcast now), or null (the check
-   * itself kept failing even after getActiveLiveBroadcast's own retries).
-   * Centralized here because both call sites above need to treat null the
-   * same way -- as grounds to keep going, not as a green light to finalize.
+   * (confirmed ended or a different broadcast now), or null (every identity
+   * in the pool failed to answer). Centralized here because both call sites
+   * above need to treat null the same way -- as grounds to keep going, not
+   * as a green light to finalize.
    *
-   * Passes the job's OWN cookie identity (already assigned when its
-   * recording started) into the check, rather than letting it round-robin
-   * across the pool -- a re-check on a channel this job is already recording
-   * should ride that same identity, not add load to a different one.
+   * Tries the job's OWN cookie identity first (already assigned when its
+   * recording started, so this is the common, no-extra-load case), but falls
+   * back through every OTHER identity in the pool before giving up. A
+   * read-only liveness check doesn't need to match the job's download
+   * identity, unlike the recording itself -- and this is exactly the gap
+   * that let the 2026-09-25 incident happen: two of three identities got
+   * bot-blocked under sustained load, and every job pinned to one of them
+   * kept re-checking against nothing but that same blocked identity,
+   * exhausting its continuation budget and fragmenting into a new upload
+   * every 20-40 minutes for hours, even though the third identity was
+   * healthy the whole time and could have answered immediately.
    */
   private async checkStillLive(channelId: string, videoId: string, jobId: string): Promise<boolean | null> {
-    try {
-      const live = await this.youtubeLive.getActiveLiveBroadcast(channelId, this.identityPool.getForJob(jobId));
-      return !!live && live.videoId === videoId;
-    } catch (err) {
-      this.logger.warn(`live re-check errored for ${channelId}, treating as unknown: ${(err as Error).message}`);
-      return null;
+    const ownIdentity = this.identityPool.getForJob(jobId);
+    const fallbacks = this.identityPool.listIdentities().filter((id) => id !== ownIdentity);
+    const candidates = [ownIdentity, ...fallbacks];
+
+    for (const identity of candidates) {
+      try {
+        const live = await this.youtubeLive.getActiveLiveBroadcast(channelId, identity);
+        return !!live && live.videoId === videoId;
+      } catch (err) {
+        this.logger.warn(`live re-check for ${channelId} errored on identity "${identity ?? '(none)'}": ${(err as Error).message}`);
+      }
     }
+    this.logger.warn(`live re-check for ${channelId} failed on every identity in the pool (tried ${candidates.length}) -- treating as unknown`);
+    return null;
   }
 
   private renderTemplate(template: string, channelTitle: string, originalTitle: string): string {
