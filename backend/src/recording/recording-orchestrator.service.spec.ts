@@ -1,4 +1,4 @@
-import { RecordingOrchestratorService } from './recording-orchestrator.service';
+import { RecordingOrchestratorService, MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES } from './recording-orchestrator.service';
 import { JobStatus } from '../common/enums';
 
 /**
@@ -128,9 +128,9 @@ describe('RecordingOrchestratorService - liveness re-check under contention', ()
     const channel = makeChannel();
     const recordingOptions = { jobId: 'job-1', videoId: 'video-1', channelSlug: 'Test Channel' };
 
-    // MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES is 5 -- a 6th clean exit in a
-    // row with an unresolvable check should stop leaning on "assume live".
-    for (let i = 0; i < 6; i++) {
+    // One more clean exit than the budget allows, with an unresolvable check
+    // every time, should stop leaning on "assume live".
+    for (let i = 0; i < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES + 1; i++) {
       await orchestrator.handleRecordingExit(
         channel,
         'job-1',
@@ -139,7 +139,7 @@ describe('RecordingOrchestratorService - liveness re-check under contention', ()
       );
     }
 
-    expect(ytdlp.continueSegment).toHaveBeenCalledTimes(5);
+    expect(ytdlp.continueSegment).toHaveBeenCalledTimes(MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES);
     expect(ytdlp.finalizeSegments).toHaveBeenCalledTimes(1);
     expect(upload.upload).toHaveBeenCalledTimes(1);
   });
@@ -182,8 +182,9 @@ describe('RecordingOrchestratorService - liveness re-check under contention', ()
     const channel = makeChannel();
     const recordingOptions = { jobId: 'job-1', videoId: 'video-1', channelSlug: 'Test Channel' };
 
-    // 5 continuations allowed; the 6th crash in a row exhausts the budget.
-    for (let i = 0; i < 6; i++) {
+    // The budget's worth of continuations is allowed; one crash beyond that
+    // exhausts it.
+    for (let i = 0; i < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES + 1; i++) {
       await orchestrator.handleRecordingExit(
         channel,
         'job-1',
@@ -192,7 +193,7 @@ describe('RecordingOrchestratorService - liveness re-check under contention', ()
       );
     }
 
-    expect(ytdlp.continueSegment).toHaveBeenCalledTimes(5);
+    expect(ytdlp.continueSegment).toHaveBeenCalledTimes(MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES);
     expect(ytdlp.finalizeSegments).toHaveBeenCalledTimes(1);
     expect(upload.upload).toHaveBeenCalledTimes(1);
     expect(jobs.updateStatus).toHaveBeenCalledWith('job-1', JobStatus.COMPLETED, expect.anything());
@@ -207,7 +208,7 @@ describe('RecordingOrchestratorService - liveness re-check under contention', ()
     const channel = makeChannel();
     const recordingOptions = { jobId: 'job-1', videoId: 'video-1', channelSlug: 'Test Channel' };
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES + 1; i++) {
       await orchestrator.handleRecordingExit(
         channel,
         'job-1',

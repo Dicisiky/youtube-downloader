@@ -10,11 +10,22 @@ import { YoutubeUploadService } from '../youtube/youtube-upload.service';
 import { YoutubeLiveService } from '../youtube/youtube-live.service';
 import type { MonitoredChannel } from '@prisma/client';
 
-// How many times a job may be resumed as a new segment after yt-dlp exhausts
-// its own in-place restarts, before giving up for good even if the broadcast
-// is still reported live -- guards against retrying forever on a genuinely
-// broken pipeline (vs. a transient YouTube-side hiccup).
-const MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES = 5;
+// How many times a job may be resumed as a new segment while the live-check
+// stays inconclusive (every identity in the pool failing, or yt-dlp itself
+// exhausted), before giving up for good even if the broadcast is still
+// reported live. This only ever throttles the "genuinely can't tell" case --
+// a *confirmed* still-live or confirmed-offline answer always bypasses it,
+// so raising it has no effect on an ordinary clean stream end.
+//
+// Was 5 until the 2026-09-28 incident: a sustained YouTube-side rate-limit
+// storm lasted 90+ minutes, and every single one of the many "can't tell"
+// results that day eventually resolved to "still live" once the throttling
+// eased -- never once to a genuinely dead stream. 5 was far too little
+// patience for how long real-world throttling can persist, and each
+// exhaustion meant an early upload + a second (or third) video for the same
+// stream instead of one continuous recording. Raised generously; a job that
+// is truly, permanently unreachable still finalizes eventually, just later.
+export const MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES = 30;
 
 /**
  * The single place that owns a recording job's full lifecycle:
