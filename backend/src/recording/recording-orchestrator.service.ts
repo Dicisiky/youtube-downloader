@@ -1,14 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { unlink } from 'fs/promises';
-import { JobStatus, LiveStatus, RecordingStatus } from '../common/enums';
-import { PrismaService } from '../prisma/prisma.service';
-import { EventsGateway } from '../events/events.gateway';
-import { RecordingJobsService } from '../recording-jobs/recording-jobs.service';
-import { YtdlpManagerService, StartRecordingOptions, RecordingExitReason } from '../ytdlp/ytdlp-manager.service';
-import { CookieIdentityPoolService } from '../ytdlp/cookie-identity-pool.service';
-import { YoutubeUploadService } from '../youtube/youtube-upload.service';
-import { YoutubeLiveService } from '../youtube/youtube-live.service';
-import type { MonitoredChannel } from '@prisma/client';
+import { Injectable, Logger } from "@nestjs/common";
+import { unlink } from "fs/promises";
+import { JobStatus, LiveStatus, RecordingStatus } from "../common/enums";
+import { PrismaService } from "../prisma/prisma.service";
+import { EventsGateway } from "../events/events.gateway";
+import { RecordingJobsService } from "../recording-jobs/recording-jobs.service";
+import {
+  YtdlpManagerService,
+  StartRecordingOptions,
+  RecordingExitReason,
+} from "../ytdlp/ytdlp-manager.service";
+import { CookieIdentityPoolService } from "../ytdlp/cookie-identity-pool.service";
+import { YoutubeUploadService } from "../youtube/youtube-upload.service";
+import { YoutubeLiveService } from "../youtube/youtube-live.service";
+import type { MonitoredChannel } from "@prisma/client";
 
 // How many times a job may be resumed as a new segment while the live-check
 // stays inconclusive (every identity in the pool failing, or yt-dlp itself
@@ -56,7 +60,11 @@ export class RecordingOrchestratorService {
     private readonly events: EventsGateway,
   ) {}
 
-  async startRecording(channel: MonitoredChannel, videoId: string, title: string) {
+  async startRecording(
+    channel: MonitoredChannel,
+    videoId: string,
+    title: string,
+  ) {
     const job = await this.jobs.create(channel.id, videoId, title);
 
     // We're only ever called with a videoId that a live-check JUST confirmed
@@ -75,11 +83,22 @@ export class RecordingOrchestratorService {
       videoId,
       channelSlug,
       onProgress: (line) => {
-        this.events.broadcast({ type: 'log', payload: { message: `[${channelSlug}] ${line}`, level: 'info' } });
+        this.events.broadcast({
+          type: "log",
+          payload: { message: `[${channelSlug}] ${line}`, level: "info" },
+        });
       },
       onExit: (result) => {
-        this.handleRecordingExit(channel, job.id, result, recordingOptions).catch((err) =>
-          this.logger.error(`post-recording pipeline failed for job ${job.id}`, err),
+        this.handleRecordingExit(
+          channel,
+          job.id,
+          result,
+          recordingOptions,
+        ).catch((err) =>
+          this.logger.error(
+            `post-recording pipeline failed for job ${job.id}`,
+            err,
+          ),
         );
       },
     };
@@ -96,14 +115,23 @@ export class RecordingOrchestratorService {
   private async handleRecordingExit(
     channel: MonitoredChannel,
     jobId: string,
-    result: { success: boolean; filePath: string; reason: RecordingExitReason; error?: string },
+    result: {
+      success: boolean;
+      filePath: string;
+      reason: RecordingExitReason;
+      error?: string;
+    },
     recordingOptions: StartRecordingOptions,
   ) {
     // The channel/job may have been deleted (Cascade) while yt-dlp was still
     // shutting down after a forced stop -- nothing left to update in that case.
-    const stillExists = await this.prisma.recordingJob.findUnique({ where: { id: jobId } });
+    const stillExists = await this.prisma.recordingJob.findUnique({
+      where: { id: jobId },
+    });
     if (!stillExists) {
-      this.logger.log(`job ${jobId} no longer exists (channel likely removed); dropping its exit result`);
+      this.logger.log(
+        `job ${jobId} no longer exists (channel likely removed); dropping its exit result`,
+      );
       this.ytdlp.clearSegments(jobId);
       return;
     }
@@ -121,14 +149,18 @@ export class RecordingOrchestratorService {
       // (not a transient YouTube hiccup) still surfaces as FAILED eventually
       // instead of retrying forever.
       if (stillExists.retryCount < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES) {
-        const stillLive = await this.checkStillLive(channel.channelId, recordingOptions.videoId, jobId);
+        const stillLive = await this.checkStillLive(
+          channel.channelId,
+          recordingOptions.videoId,
+          jobId,
+        );
         // An inconclusive check (null) is treated the same as "still live":
         // the re-check itself failing is exactly the scenario this exists to
         // survive, not a reason to fall back to the old truncate-and-upload
         // behavior.
         if (stillLive !== false) {
           this.logger.warn(
-            `[${jobId}] yt-dlp exhausted its local retries (${result.error}) and live status is ${stillLive === null ? 'unknown' : 'still live'} -- continuing as a new segment instead of failing the job`,
+            `[${jobId}] yt-dlp exhausted its local retries (${result.error}) and live status is ${stillLive === null ? "unknown" : "still live"} -- continuing as a new segment instead of failing the job`,
           );
           await this.jobs.incrementRetryCount(jobId);
           this.ytdlp.continueSegment(recordingOptions);
@@ -142,7 +174,9 @@ export class RecordingOrchestratorService {
       // (which is what previously left a stray .seg0.* file needing a manual
       // cleanup on the VPS). finalizeRecording already fails the job itself,
       // with RecordingStatus=ERROR, if there's truly nothing on disk to find.
-      this.logger.warn(`[${jobId}] giving up after repeated failures (${result.error}) -- salvaging whatever was captured`);
+      this.logger.warn(
+        `[${jobId}] giving up after repeated failures (${result.error}) -- salvaging whatever was captured`,
+      );
       await this.finalizeRecording(channel, jobId, recordingOptions, false);
       return;
     }
@@ -152,21 +186,28 @@ export class RecordingOrchestratorService {
     // recording pipeline's own state.
     let confirmedOffline = false;
 
-    if (result.reason === 'stream_ended') {
+    if (result.reason === "stream_ended") {
       // yt-dlp exiting 0 isn't reliable proof the broadcast actually ended --
       // a live HLS playlist hiccup can trigger the same clean exit. Re-check
       // before finalizing: if the SAME broadcast is still live, this was a
       // false alarm, so record the continuation as a new segment of this job
       // instead of uploading a truncated clip (which is what previously
       // caused one livestream to get uploaded as several separate videos).
-      const stillLive = await this.checkStillLive(channel.channelId, recordingOptions.videoId, jobId);
+      const stillLive = await this.checkStillLive(
+        channel.channelId,
+        recordingOptions.videoId,
+        jobId,
+      );
       if (stillLive === true) {
         // Confirmed still airing -- uncapped, same as ever: a long stream can
         // have any number of these false-alarm clean exits.
         this.ytdlp.continueSegment(recordingOptions);
         return;
       }
-      if (stillLive === null && stillExists.retryCount < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES) {
+      if (
+        stillLive === null &&
+        stillExists.retryCount < MAX_CONTINUATIONS_AFTER_EXHAUSTED_RETRIES
+      ) {
         // Couldn't get a confirmed answer at all -- leaning toward "assume
         // still live" here is what this whole re-check exists for; assuming
         // the opposite is exactly what used to truncate a healthy stream into
@@ -194,7 +235,12 @@ export class RecordingOrchestratorService {
     // stop capturing early, which says nothing about whether the stream is
     // still airing, so LiveStatus is left for the next poll tick to settle.
 
-    await this.finalizeRecording(channel, jobId, recordingOptions, confirmedOffline);
+    await this.finalizeRecording(
+      channel,
+      jobId,
+      recordingOptions,
+      confirmedOffline,
+    );
   }
 
   private async finalizeRecording(
@@ -203,11 +249,16 @@ export class RecordingOrchestratorService {
     recordingOptions: StartRecordingOptions,
     confirmedOffline: boolean,
   ) {
-    await this.jobs.updateStatus(jobId, JobStatus.PROCESSING, { recordingEndedAt: new Date() });
+    await this.jobs.updateStatus(jobId, JobStatus.PROCESSING, {
+      recordingEndedAt: new Date(),
+    });
 
     let finalPath: string | null;
     try {
-      finalPath = await this.ytdlp.finalizeSegments(recordingOptions.channelSlug, recordingOptions.videoId);
+      finalPath = await this.ytdlp.finalizeSegments(
+        recordingOptions.channelSlug,
+        recordingOptions.videoId,
+      );
     } catch (err) {
       // Confirmed the hard way (2026-09-28): an unhandled throw here used to
       // fall through to startRecording()'s generic top-level logger and stop
@@ -219,12 +270,17 @@ export class RecordingOrchestratorService {
       // reset, identity released -- keeps this a one-job failure instead.
       // Segment files are deliberately left on disk (not cleaned up here) so
       // a real merge crash can still be recovered by hand.
-      this.logger.error(`[${jobId}] merging recorded segments failed -- marking FAILED instead of leaving the channel stuck`, err as Error);
-      await this.jobs.updateStatus(jobId, JobStatus.FAILED, { errorMessage: `segment merge failed: ${(err as Error).message}` });
+      this.logger.error(
+        `[${jobId}] merging recorded segments failed -- marking FAILED instead of leaving the channel stuck`,
+        err as Error,
+      );
+      await this.jobs.updateStatus(jobId, JobStatus.FAILED, {
+        errorMessage: `segment merge failed: ${(err as Error).message}`,
+      });
       await this.updateChannelState(channel.id, {
         recordingStatus: RecordingStatus.ERROR,
         currentVideoId: null,
-        lastError: 'segment merge failed',
+        lastError: "segment merge failed",
         ...(confirmedOffline ? { liveStatus: LiveStatus.OFFLINE } : {}),
       });
       this.ytdlp.clearSegments(jobId);
@@ -232,12 +288,13 @@ export class RecordingOrchestratorService {
     }
     if (!finalPath) {
       await this.jobs.updateStatus(jobId, JobStatus.FAILED, {
-        errorMessage: 'Recording finished but the output file could not be located on disk',
+        errorMessage:
+          "Recording finished but the output file could not be located on disk",
       });
       await this.updateChannelState(channel.id, {
         recordingStatus: RecordingStatus.ERROR,
         currentVideoId: null,
-        lastError: 'output file missing',
+        lastError: "output file missing",
         ...(confirmedOffline ? { liveStatus: LiveStatus.OFFLINE } : {}),
       });
       this.ytdlp.clearSegments(jobId);
@@ -257,8 +314,8 @@ export class RecordingOrchestratorService {
       const destinationVideoId = await this.upload.upload({
         uploadConfigId: channel.uploadConfigId,
         filePath: finalPath,
-        title: this.renderTemplate(channel.titleTemplate, channel.channelTitle ?? '', job.sourceTitle ?? ''),
-        description: `Recorded automatically from ${channel.channelUrl}\nOriginal title: ${job.sourceTitle ?? ''}`,
+        title: job.sourceTitle ?? "",
+        description: `Recorded automatically from ${channel.channelUrl}\nOriginal title: ${job.sourceTitle ?? ""}`,
         visibility: channel.defaultVisibility,
         playlistId: channel.playlistId,
       });
@@ -274,20 +331,29 @@ export class RecordingOrchestratorService {
       try {
         await unlink(finalPath);
       } catch (err) {
-        this.logger.warn(`could not delete local recording ${finalPath} after upload: ${(err as Error).message}`);
+        this.logger.warn(
+          `could not delete local recording ${finalPath} after upload: ${(err as Error).message}`,
+        );
       }
     } catch (err) {
       this.logger.error(`upload failed for job ${jobId}`, err as Error);
-      await this.jobs.updateStatus(jobId, JobStatus.FAILED, { errorMessage: (err as Error).message });
+      await this.jobs.updateStatus(jobId, JobStatus.FAILED, {
+        errorMessage: (err as Error).message,
+      });
     } finally {
       // RecordingStatus goes back to IDLE -- unless the channel was paused
       // WHILE this recording was wrapping up, in which case it should land
       // on PAUSED instead. Read isActive fresh rather than trusting the
       // `channel` object captured back when this job started.
-      const fresh = await this.prisma.monitoredChannel.findUnique({ where: { id: channel.id }, select: { isActive: true } });
+      const fresh = await this.prisma.monitoredChannel.findUnique({
+        where: { id: channel.id },
+        select: { isActive: true },
+      });
       if (fresh) {
         await this.updateChannelState(channel.id, {
-          recordingStatus: fresh.isActive ? RecordingStatus.IDLE : RecordingStatus.PAUSED,
+          recordingStatus: fresh.isActive
+            ? RecordingStatus.IDLE
+            : RecordingStatus.PAUSED,
           currentVideoId: null,
           ...(confirmedOffline ? { liveStatus: LiveStatus.OFFLINE } : {}),
         });
@@ -315,28 +381,34 @@ export class RecordingOrchestratorService {
    * every 20-40 minutes for hours, even though the third identity was
    * healthy the whole time and could have answered immediately.
    */
-  private async checkStillLive(channelId: string, videoId: string, jobId: string): Promise<boolean | null> {
+  private async checkStillLive(
+    channelId: string,
+    videoId: string,
+    jobId: string,
+  ): Promise<boolean | null> {
     const ownIdentity = this.identityPool.getForJob(jobId);
-    const fallbacks = this.identityPool.listIdentities().filter((id) => id !== ownIdentity);
+    const fallbacks = this.identityPool
+      .listIdentities()
+      .filter((id) => id !== ownIdentity);
     const candidates = [ownIdentity, ...fallbacks];
 
     for (const identity of candidates) {
       try {
-        const live = await this.youtubeLive.getActiveLiveBroadcast(channelId, identity);
+        const live = await this.youtubeLive.getActiveLiveBroadcast(
+          channelId,
+          identity,
+        );
         return !!live && live.videoId === videoId;
       } catch (err) {
-        this.logger.warn(`live re-check for ${channelId} errored on identity "${identity ?? '(none)'}": ${(err as Error).message}`);
+        this.logger.warn(
+          `live re-check for ${channelId} errored on identity "${identity ?? "(none)"}": ${(err as Error).message}`,
+        );
       }
     }
-    this.logger.warn(`live re-check for ${channelId} failed on every identity in the pool (tried ${candidates.length}) -- treating as unknown`);
+    this.logger.warn(
+      `live re-check for ${channelId} failed on every identity in the pool (tried ${candidates.length}) -- treating as unknown`,
+    );
     return null;
-  }
-
-  private renderTemplate(template: string, channelTitle: string, originalTitle: string): string {
-    return template
-      .replace('{channelTitle}', channelTitle)
-      .replace('{originalTitle}', originalTitle)
-      .replace('{date}', new Date().toISOString().slice(0, 10));
   }
 
   private async updateChannelState(
@@ -349,10 +421,13 @@ export class RecordingOrchestratorService {
     },
   ) {
     const channel = await this.prisma.monitoredChannel
-      .update({ where: { id: channelId }, data: { ...data, lastPolledAt: new Date() } })
+      .update({
+        where: { id: channelId },
+        data: { ...data, lastPolledAt: new Date() },
+      })
       .catch(() => null); // channel may have been deleted concurrently (e.g. removed mid-recording)
     if (!channel) return null;
-    this.events.broadcast({ type: 'channel.updated', payload: channel });
+    this.events.broadcast({ type: "channel.updated", payload: channel });
     return channel;
   }
 }
