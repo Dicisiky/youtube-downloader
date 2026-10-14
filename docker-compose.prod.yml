@@ -26,6 +26,7 @@ services:
       YTDLP_COOKIES_FILE: /app/secrets/cookies.txt
       YTDLP_BROWSER_PROFILE_DIR: /app/secrets/chrome-profile
       YTDLP_BROWSER_PROFILES_DIR: /app/secrets/chrome-profiles
+      YTDLP_POT_PROVIDER_URL: http://bgutil-provider:4416
     volumes:
       - ./storage/recordings:/app/storage/recordings
       - ./secrets/cookies.txt:/app/secrets/cookies.txt
@@ -34,6 +35,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      bgutil-provider:
+        condition: service_started
+
+  # Mints YouTube PO tokens for yt-dlp's bgutil plugin (installed in the
+  # backend image -- keep this tag in step with BGUTIL_VERSION there). Only
+  # reachable from the backend over the compose network; no published port.
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:2.0.2
+    init: true
+    restart: unless-stopped
 
   frontend:
     build: ./frontend

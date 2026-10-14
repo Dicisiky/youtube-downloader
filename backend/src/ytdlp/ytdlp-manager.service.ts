@@ -7,7 +7,7 @@ import { join } from 'path';
 import { promisify } from 'util';
 import { resolveCookieArgs } from './ytdlp-cookies.util';
 import { isRateLimited } from './ytdlp-errors.util';
-import { YOUTUBE_CLIENT_ARGS } from './ytdlp-client.util';
+import { youtubeClientArgs } from './ytdlp-client.util';
 import { CookieIdentityPoolService } from './cookie-identity-pool.service';
 
 const execFileAsync = promisify(execFile);
@@ -135,7 +135,7 @@ export class YtdlpManagerService {
       '--print',
       'after_move:filepath',
       ...cookieArgs,
-      ...YOUTUBE_CLIENT_ARGS,
+      ...youtubeClientArgs(this.config.get<string>('ytdlp.potProviderUrl')),
     ];
 
     this.logger.log(`[${jobId}] spawning yt-dlp for videoId=${videoId} (attempt ${restartCount + 1})`);

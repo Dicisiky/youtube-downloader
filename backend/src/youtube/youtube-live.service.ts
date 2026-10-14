@@ -5,7 +5,7 @@ import { promisify } from 'util';
 import { google } from 'googleapis';
 import { resolveCookieArgs } from '../ytdlp/ytdlp-cookies.util';
 import { isRateLimited } from '../ytdlp/ytdlp-errors.util';
-import { YOUTUBE_CLIENT_ARGS } from '../ytdlp/ytdlp-client.util';
+import { youtubeClientArgs } from '../ytdlp/ytdlp-client.util';
 import { CookieIdentityPoolService } from '../ytdlp/cookie-identity-pool.service';
 
 const execFileAsync = promisify(execFile);
@@ -167,7 +167,7 @@ export class YoutubeLiveService {
           '--print',
           'title=%(title)s',
           ...cookieArgs,
-          ...YOUTUBE_CLIENT_ARGS,
+          ...youtubeClientArgs(this.config.get<string>('ytdlp.potProviderUrl')),
           `https://www.youtube.com/channel/${channelId}/live`,
         ],
         { timeout: 20_000 },

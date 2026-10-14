@@ -38,6 +38,12 @@ export default () => ({
     // account's YouTube rate-limit budget. Optional: add identities to this
     // pool at any time, no restart-time count to configure.
     browserProfilesDir: process.env.YTDLP_BROWSER_PROFILES_DIR ?? '',
+    // Base URL of the bgutil PO token provider (the bgutil-provider service in
+    // docker-compose.prod.yml). Needed on datacenter IPs, where some streams
+    // are only reachable via YouTube's mweb client, which cuts downloads off
+    // after a minute or two without a PO token. Optional: when unset, the
+    // plugin tries its own default of http://127.0.0.1:4416.
+    potProviderUrl: process.env.YTDLP_POT_PROVIDER_URL ?? '',
   },
   poll: {
     intervalMs: parseInt(process.env.POLL_INTERVAL_MS ?? '60000', 10),
